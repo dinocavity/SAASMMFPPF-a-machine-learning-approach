@@ -9,6 +9,6 @@ def analyze_sentiment_custom(text):
     prob = model.predict_proba(X)[0].max()
 
     return {
-        "label": "POSITIVE" if pred == 1 else "NEGATIVE",
-        "confidence": float(prob)
+        "sentiment": "positive" if pred == 1 else "negative",
+        "confidence": float(prob),
     }

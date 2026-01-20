@@ -8,6 +8,6 @@ def analyze_fraud(text):
     prob = model.predict_proba(X)[0][1]
 
     return {
-        "risk": "High" if prob > 0.6 else "Low",
-        "confidence": float(prob)
+        "is_fake": prob > 0.6,
+        "confidence": float(prob),
     }
