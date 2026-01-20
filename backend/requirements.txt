@@ -1,6 +1,11 @@
 fastapi
 uvicorn
-transformers
-torch
-scikit-learn
+pydantic
+python-multipart
+requests
+scikit-learn==1.8.0
 joblib
+sqlalchemy
+psycopg2-binary
+python-jose[cryptography]
+passlib

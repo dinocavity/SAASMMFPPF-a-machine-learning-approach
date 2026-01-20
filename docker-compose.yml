@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=SAASMMFPPF
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+      - "5173:5173"
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      - ./extension:/app/extension
+      - ./scripts:/app/scripts
+      - /app/frontend/node_modules
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/SAASMMFPPF
+      - JWT_SECRET=change-this-secret
+      - SUPERADMIN_USERNAME=superadmin
+      - SUPERADMIN_PASSWORD=superadmin123
+      - CORS_ORIGINS=http://localhost:5173
+      - VITE_API_URL=http://localhost:8000
+      - HUGGINGFACE_TOKEN=
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

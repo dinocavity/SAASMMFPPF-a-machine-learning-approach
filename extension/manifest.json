@@ -1,9 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "Shopee Review Analyzer",
-  "version": "1.0",
-  "permissions": ["sidePanel"],
+  "name": "SAASMMFPPF-a-machine-learning-approach",
+  "version": "0.1.0",
+  "description": "SENTIMENT ANALYSIS AND SOCIAL MEDIA MONITORING FOR PREVENTING PURCHASE FRAUD: A MACHINE LEARNING APPROACH",
+  "action": {
+    "default_title": "SAASMMFPPF"
+  },
   "side_panel": {
-    "default_path": "sidepanel.html"
+    "default_path": "index.html"
+  },
+  "permissions": ["sidePanel", "storage"],
+  "host_permissions": ["http://localhost:8000/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http://localhost:8000 https://tessdata.projectnaptha.com; worker-src 'self'"
   }
 }
