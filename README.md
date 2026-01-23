@@ -1,32 +1,42 @@
 # SAASMMFPPF-a-machine-learning-approach
 
-OVERVIEW: WHAT WE'RE BUILDING LOCALLY
-- Chrome extension (side panel) client UI
-- FastAPI backend (API-based)
-- Two sentiment models (API + custom)
-- One authenticity model
-- OCR on client (no scraping)
-- Postgres for users + auth
+SENTIMENT ANALYSIS AND SOCIAL MEDIA MONITORING FOR PREVENTING PURCHASE FRAUD: A MACHINE LEARNING APPROACH.
+This project analyzes public review text with sentiment and authenticity models,
+then combines OCR and structured signals to flag purchase-fraud risk.
 
-This repo currently runs the UI as a local web app, with client-side OCR and a
-FastAPI backend that requires a superadmin login. It is the same workflow intended
-for the side-panel extension.
+## Environment
+Copy `.env.example` to `.env` and adjust values for your setup. For local runs,
+export the variables in your shell (examples below). Docker uses the defaults in
+`docker-compose.yml`.
 
-Meaning: SENTIMENT ANALYSIS AND SOCIAL MEDIA MONITORING FOR PREVENTING PURCHASE FRAUD: A MACHINE LEARNING APPROACH.
- 
-Note: This UI is designed to become a Chrome side-panel extension; keep layouts
-compact and panel-friendly.
-
-## Quick Run (Docker)
+## Run With Docker
 ```bash
 docker-compose up -d --build
 ```
 - Frontend: http://localhost:5173
 - Backend: http://localhost:8000/docs
+Note: Docker starts the frontend and backend only; it does not build the extension
+unless you run the extension build step below.
 
 Default credentials:
 - Username: `superadmin`
 - Password: `superadmin123`
+
+### Access Postgres (Docker)
+- Connection string: `postgresql://postgres:postgres@localhost:5432/SAASMMFPPF`
+- psql inside the container:
+```bash
+docker-compose exec db psql -U postgres -d SAASMMFPPF
+```
+- psql from your host (if installed):
+```bash
+psql "postgresql://postgres:postgres@localhost:5432/SAASMMFPPF"
+```
+
+### Build Extension (Docker)
+```bash
+docker-compose exec app sh /app/scripts/build-extension.sh
+```
 
 ## Run Without Docker (Local)
 Prereqs: Node 18+, Python 3.9+, Postgres 14+
@@ -51,9 +61,9 @@ npm install
 npm run dev
 ```
 
-## Chrome Side Panel Extension Setup (Local)
-This repo does not ship a full extension scaffold yet. You can wire the UI into
-a local side-panel extension with these steps:
+## Build Extension (Local)
+The extension folder is included, but the packaged UI files are generated from
+the frontend build.
 
 1) Build the frontend:
 ```bash
@@ -62,7 +72,7 @@ npm install
 npm run build
 ```
 
-2) Create an `extension/` folder and copy `frontend/dist/*` into it.
+2) Copy `frontend/dist/*` into `extension/`.
 
 3) Add `extension/manifest.json`:
 ```json
@@ -84,14 +94,11 @@ npm run build
 
 4) Load it in Chrome:
 `chrome://extensions` -> Enable Developer Mode -> Load unpacked -> select `extension/`.
+If the panel does not appear, click the extension icon and pin it, then open the
+side panel from the Chrome toolbar.
 
 If you change the API URL, update `host_permissions` and `VITE_API_URL` before
 building the frontend.
-
-Optional (Docker build step):
-```bash
-docker-compose exec app sh /app/scripts/build-extension.sh
-```
 
 OCR language data defaults to `https://tessdata.projectnaptha.com/4.0.0`. To run
 fully offline, place `eng.traineddata.gz` in `extension/tesseract/lang-data/` and
