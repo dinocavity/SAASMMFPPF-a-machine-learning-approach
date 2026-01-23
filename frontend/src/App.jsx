@@ -97,6 +97,16 @@ function App() {
     localStorage.removeItem("auth_token");
   };
 
+const scrollToReviews = () => {
+  // For side panel, send message directly to the active tab's content script
+  chrome.runtime.sendMessage({ action: "scrollToReviews" }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Error:', chrome.runtime.lastError);
+    }
+  });
+};
+
+
   const runOcr = async () => {
     if (!ocrFile) {
       setOcrError("Choose an image to run OCR.");
@@ -205,6 +215,9 @@ function App() {
                       Client-side OCR runs in the browser. No scraping.
                     </p>
                   </div>
+                  <Button onClick={scrollToReviews} variant="outline">
+                    📍 Scroll to Reviews
+                  </Button>
                   <Button
                     variant="secondary"
                     onClick={runOcr}
