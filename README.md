@@ -13,7 +13,7 @@ FastAPI backend that requires a superadmin login. It is the same workflow intend
 for the side-panel extension.
 
 Meaning: SENTIMENT ANALYSIS AND SOCIAL MEDIA MONITORING FOR PREVENTING PURCHASE FRAUD: A MACHINE LEARNING APPROACH.
-
+ 
 Note: This UI is designed to become a Chrome side-panel extension; keep layouts
 compact and panel-friendly.
 
