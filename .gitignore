@@ -43,6 +43,16 @@ pnpm-debug.log*
 # Logs
 logs/
 
+# Browser extension build artifacts
+extension/dist/
+extension/build/
+extension/.parcel-cache/
+extension/.webpack/
+extension/.vite/
+extension/*.zip
+extension/*.crx
+extension/*.xpi
+
 # Editor/OS
 .idea/
 .vscode/
