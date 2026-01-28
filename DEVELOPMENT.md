@@ -35,7 +35,7 @@ components narrow and optimized for vertical layouts.
 To wire the UI into a Chrome side panel locally:
 
 1) Build the frontend: `npm run build` in `frontend/`.
-2) Create `extension/` and copy `frontend/dist/*` into it.
+2) Build output writes directly into `extension/` (no manual copy needed).
 3) Add a MV3 manifest with a `side_panel` entry:
 ```json
 {
@@ -57,3 +57,10 @@ If you change the API host, update `host_permissions` and rebuild the frontend.
 - If Postgres is local, point `DATABASE_URL` to `localhost`.
 - If frontend runs inside Docker, use `VITE_API_URL=http://backend:8000`.
 - API docs: http://localhost:8000/docs
+
+## Docker Dev Watch (No Rebuilds)
+To keep the extension UI synced while editing, run:
+```bash
+docker-compose exec app sh /app/scripts/dev-watch.sh
+```
+Reload the extension in `chrome://extensions` after changes.

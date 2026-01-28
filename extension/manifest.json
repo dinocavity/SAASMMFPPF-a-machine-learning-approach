@@ -16,20 +16,43 @@
     "sidePanel",
     "storage",
     "tabs",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
+    "<all_urls>",
     "http://localhost:8000/*",
-    "https://shopee.ph/*"
+    "https://shopee.ph/*",
+    "https://*.shopee.ph/*",
+    "https://*.shopee.com/*",
+    "https://*.lazada.com/*",
+    "https://*.lazada.sg/*",
+    "https://*.lazada.com.ph/*",
+    "https://*.lazada.vn/*",
+    "https://*.lazada.co.id/*",
+    "https://*.lazada.co.th/*",
+    "https://*.lazada.com.my/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.shopee.ph/*", "*://*.shopee.com/*"],
+      "matches": [
+        "*://shopee.ph/*",
+        "*://*.shopee.ph/*",
+        "*://shopee.com/*",
+        "*://*.shopee.com/*",
+        "*://*.lazada.com/*",
+        "*://*.lazada.sg/*",
+        "*://*.lazada.com.ph/*",
+        "*://*.lazada.vn/*",
+        "*://*.lazada.co.id/*",
+        "*://*.lazada.co.th/*",
+        "*://*.lazada.com.my/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http://localhost:8000 https://tessdata.projectnaptha.com; worker-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http://localhost:8000 https://tessdata.projectnaptha.com https://cdn.jsdelivr.net data:; worker-src 'self'"
   }
 }
