@@ -7,7 +7,7 @@ then combines OCR and structured signals to flag purchase-fraud risk.
 ## Environment
 Copy `.env.example` to `.env` and adjust values for your setup. For local runs,
 export the variables in your shell (examples below). Docker uses the defaults in
-`docker-compose.yml`.
+`docker-compose.yml`. The backend also auto-loads `.env` via `python-dotenv`.
 
 ## Run With Docker
 ```bash
@@ -23,14 +23,14 @@ Default credentials:
 - Password: `superadmin123`
 
 ### Access Postgres (Docker)
-- Connection string: `postgresql://postgres:postgres@localhost:5432/SAASMMFPPF`
+- Connection string: `postgresql://postgres:postgres@localhost:5433/SAASMMFPPF`
 - psql inside the container:
 ```bash
 docker-compose exec db psql -U postgres -d SAASMMFPPF
 ```
 - psql from your host (if installed):
 ```bash
-psql "postgresql://postgres:postgres@localhost:5432/SAASMMFPPF"
+psql "postgresql://postgres:postgres@localhost:5433/SAASMMFPPF"
 ```
 
 ### Build Extension (Docker)
@@ -56,7 +56,7 @@ cd backend
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-set DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/SAASMMFPPF
+set DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/SAASMMFPPF
 set JWT_SECRET=change-this-secret
 set SUPERADMIN_USERNAME=superadmin
 set SUPERADMIN_PASSWORD=superadmin123
@@ -88,6 +88,7 @@ Tip: use watch mode during development to avoid rebuilding every time:
 cd frontend
 npm run build:watch
 ```
+Reload the extension in `chrome://extensions` after each rebuild.
 
 3) Add `extension/manifest.json`:
 ```json
@@ -102,8 +103,8 @@ npm run build:watch
   "side_panel": {
     "default_path": "index.html"
   },
-  "permissions": ["sidePanel", "storage"],
-  "host_permissions": ["http://localhost:8000/*"]
+  "permissions": ["sidePanel", "storage", "tabs", "activeTab", "scripting"],
+  "host_permissions": ["<all_urls>", "http://localhost:8000/*"]
 }
 ```
 
@@ -128,9 +129,10 @@ set `VITE_TESSERACT_LANG_PATH=/tesseract/lang-data` before building.
 ## Analyze Reviews Flow
 User opens a product page (Shopee / Lazada / etc.), then clicks **Analyze Reviews** in the side panel:
 1. Extension scrolls to the review section.
-2. Captures screenshots of the visible review area.
-3. Extracts text via OCR.
-4. Runs fraud detection and sentiment analysis automatically.
+2. (Optional) Paginate reviews from the toggle, pausing after each page if enabled.
+3. Captures screenshots of the visible review area.
+4. Extracts text via OCR.
+5. Runs fraud detection and sentiment analysis automatically.
 
 No manual screenshot. No scraping. No ToS violation.
 
