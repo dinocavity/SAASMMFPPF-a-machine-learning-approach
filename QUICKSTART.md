@@ -21,7 +21,7 @@ cd backend
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-set DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/SAASMMFPPF
+set DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/SAASMMFPPF
 set JWT_SECRET=change-this-secret
 set SUPERADMIN_USERNAME=superadmin
 set SUPERADMIN_PASSWORD=superadmin123
@@ -45,7 +45,7 @@ npm install
 npm run build
 ```
 
-2) Create `extension/` and copy `frontend/dist/*` into it.
+2) The build outputs directly into `extension/` (no manual copy needed).
 
 3) Add `extension/manifest.json`:
 ```json
@@ -56,12 +56,19 @@ npm run build
   "description": "Side panel UI for review OCR + analysis",
   "action": { "default_title": "SAASMMFPPF" },
   "side_panel": { "default_path": "index.html" },
-  "permissions": ["sidePanel", "storage"],
-  "host_permissions": ["http://localhost:8000/*"]
+  "permissions": ["sidePanel", "storage", "tabs", "activeTab", "scripting"],
+  "host_permissions": ["<all_urls>", "http://localhost:8000/*"]
 }
 ```
 
 4) `chrome://extensions` -> Developer Mode -> Load unpacked -> select `extension/`.
+
+Tip: use watch mode during development to avoid rebuilding every time:
+```bash
+cd frontend
+npm run build:watch
+```
+Reload the extension in `chrome://extensions` after changes.
 
 Optional (Docker build step):
 ```bash
