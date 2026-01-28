@@ -67,3 +67,11 @@ Optional (Docker build step):
 ```bash
 docker-compose exec app sh /app/scripts/build-extension.sh
 ```
+
+## Docker Dev Watch (No Rebuilds)
+When containers are already running, backend and frontend hot-reload on changes.
+To keep the extension UI updated without rebuilding the image:
+```bash
+docker-compose exec app sh /app/scripts/dev-watch.sh
+```
+Reload the extension in `chrome://extensions` after changes.
