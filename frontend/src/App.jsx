@@ -2,8 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import Tesseract from "tesseract.js";
 
+const defaultApiUrl = (typeof chrome !== "undefined" && chrome?.runtime?.id)
+  ? "http://localhost:8000"
+  : "";
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "",
+  baseURL: import.meta.env.VITE_API_URL || defaultApiUrl,
 });
 
 const TESSERACT_CONFIG = {
@@ -25,6 +29,10 @@ function App() {
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
+  const [paginationEnabled, setPaginationEnabled] = useState(true);
+  const [pauseEachPage, setPauseEachPage] = useState(true);
+  const [paused, setPaused] = useState(false);
+  const [pageIndex, setPageIndex] = useState(1);
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -51,6 +59,20 @@ function App() {
         runOcr(shots);
       }
 
+      if (message.action === "analysisPageComplete") {
+        setPaused(true);
+        setPageIndex(message.page || 1);
+        setStatus(`Captured page ${message.page || 1}. Continue?`);
+        return;
+      }
+
+      if (message.action === "analysisError") {
+        setStatus("");
+        setLoading(false);
+        setError(message.message || "Capture failed");
+        return;
+      }
+
       if (message.action === "analysisStopped") {
         reset();
       }
@@ -64,6 +86,8 @@ function App() {
     setLoading(false);
     setStatus("");
     setProgress(0);
+    setPaused(false);
+    setPageIndex(1);
     cancelRef.current = false;
   };
 
@@ -130,8 +154,17 @@ function App() {
     setProgress(0);
     setStatus("Starting...");
     cancelRef.current = false;
+    setPaused(false);
 
-    chrome.runtime.sendMessage({ action: "startAutoAnalyze" }, () => {
+    chrome.runtime.sendMessage(
+      {
+        action: "startAutoAnalyze",
+        pagination: {
+          enabled: paginationEnabled,
+          pauseEachPage: pauseEachPage,
+        },
+      },
+      () => {
       if (chrome.runtime.lastError) {
         setError("Extension error");
         reset();
@@ -143,6 +176,12 @@ function App() {
     cancelRef.current = true;
     chrome.runtime.sendMessage({ action: "stopAutoAnalyze" });
     reset();
+  };
+
+  const continueAnalysis = () => {
+    setPaused(false);
+    setStatus("Continuing...");
+    chrome.runtime.sendMessage({ action: "continuePagination" });
   };
 
   return (
@@ -159,14 +198,45 @@ function App() {
               <div className="progress-fill" style={{ width: `${progress}%` }} />
             </div>
             <p className="status-text">{status}</p>
-            <button className="btn btn-danger" onClick={stopAnalysis} style={{ marginTop: 12 }}>
-              Cancel
-            </button>
+            {paused ? (
+              <button className="btn btn-primary" onClick={continueAnalysis} style={{ marginTop: 12 }}>
+                Continue
+              </button>
+            ) : (
+              <button className="btn btn-danger" onClick={stopAnalysis} style={{ marginTop: 12 }}>
+                Cancel
+              </button>
+            )}
           </>
         ) : (
           <button className="btn btn-primary" onClick={startAnalysis}>
             Analyze Reviews
           </button>
+        )}
+
+        {!loading && (
+          <div style={{ marginTop: 12, fontSize: 12 }}>
+            <label style={{ display: "block", marginBottom: 6 }}>
+              <input
+                type="checkbox"
+                checked={paginationEnabled}
+                onChange={(e) => setPaginationEnabled(e.target.checked)}
+                style={{ marginRight: 6 }}
+              />
+              Paginate reviews
+            </label>
+            {paginationEnabled && (
+              <label style={{ display: "block" }}>
+                <input
+                  type="checkbox"
+                  checked={pauseEachPage}
+                  onChange={(e) => setPauseEachPage(e.target.checked)}
+                  style={{ marginRight: 6 }}
+                />
+                Pause after each page
+              </label>
+            )}
+          </div>
         )}
 
         {error && (

@@ -30,21 +30,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   if (CONTENT_ACTIONS.has(request.action)) {
     sendToActiveTab(request.action);
+    sendResponse({ success: true });
+    return false;
   }
 
   if (request.action === "captureVisible") {
-    chrome.tabs.captureVisibleTab(
-      sender.tab?.windowId,
-      { format: "png" },
-      (dataUrl) => {
-        if (chrome.runtime.lastError) {
-          sendResponse({ error: chrome.runtime.lastError.message });
-          return;
+    try {
+      chrome.tabs.captureVisibleTab(
+        sender.tab?.windowId,
+        { format: "png" },
+        (dataUrl) => {
+          if (chrome.runtime.lastError) {
+            sendResponse({ error: chrome.runtime.lastError.message });
+            return;
+          }
+          sendResponse({ dataUrl });
         }
-        sendResponse({ dataUrl });
-      }
-    );
-    return true;
+      );
+    } catch (err) {
+      sendResponse({ error: err?.message || "captureVisible failed" });
+    }
+    return true; // async response
   }
-  return true;
+  return false;
 });

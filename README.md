@@ -154,7 +154,6 @@ Response includes accuracy, precision, recall, F1, ROC-AUC (when possible), and 
 - `authenticity`
 
 ## Limitations
-Panels love honesty:
 1. Screenshot quality affects OCR accuracy.
 2. Authenticity detection is probabilistic.
 3. Limited training data impacts performance.

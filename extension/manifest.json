@@ -20,6 +20,7 @@
     "scripting"
   ],
   "host_permissions": [
+    "<all_urls>",
     "http://localhost:8000/*",
     "https://shopee.ph/*",
     "https://*.shopee.ph/*",
@@ -52,6 +53,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http://localhost:8000 https://tessdata.projectnaptha.com; worker-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http://localhost:8000 https://tessdata.projectnaptha.com https://cdn.jsdelivr.net data:; worker-src 'self'"
   }
 }
