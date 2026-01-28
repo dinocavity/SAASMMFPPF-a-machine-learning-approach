@@ -5,11 +5,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     startFlow();
     sendResponse({ success: true });
   }
+  if (request.action === "startAutoAnalyze") {
+    console.log('Auto analyze triggered');
+    startAutoAnalyze();
+    sendResponse({ success: true });
+  }
+  if (request.action === "stopAutoAnalyze") {
+    console.log('Stop auto analyze triggered');
+    stopRequested = true;
+    if (captureTimeoutId) {
+      clearTimeout(captureTimeoutId);
+      captureTimeoutId = null;
+    }
+    if (isRunning) {
+      chrome.runtime.sendMessage({ action: "analysisStopped" });
+      window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+      isRunning = false;
+    }
+    sendResponse({ success: true });
+  }
   return true;
 });
 
 let ratingsAnchor = null;
 let isRunning = false;
+let originalScrollY = 0;
+let stopRequested = false;
+let captureTimeoutId = null;
 
 function startFlow() {
   if (isRunning) {
@@ -27,6 +49,25 @@ function startFlow() {
   scrollRatingsToTop();
   console.log('Initial pause 3s...');
   setTimeout(() => handlePage(2), 3000);
+}
+
+function startAutoAnalyze() {
+  if (isRunning) {
+    console.log('Flow already running, skipping');
+    return;
+  }
+
+  isRunning = true;
+  stopRequested = false;
+  originalScrollY = window.scrollY;
+  cacheRatingsAnchor();
+  if (!ratingsAnchor) {
+    isRunning = false;
+    return;
+  }
+
+  scrollRatingsToTop();
+  setTimeout(() => captureReviewScreenshots(), 2000);
 }
 
 function cacheRatingsAnchor() {
@@ -157,4 +198,55 @@ function handlePage(page) {
     }
 
   }, 3000); // wait before clicking
+}
+
+function captureReviewScreenshots() {
+  const maxShots = 8;
+  const step = Math.max(window.innerHeight - 150, 500);
+  const docHeight = document.documentElement.scrollHeight;
+  const startY = window.scrollY;
+  const screenshots = [];
+
+  const captureAt = (index, y) => {
+    if (stopRequested) {
+      chrome.runtime.sendMessage({ action: "analysisStopped" });
+      window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+      isRunning = false;
+      return;
+    }
+
+    window.scrollTo({ top: y, behavior: 'smooth' });
+    captureTimeoutId = setTimeout(() => {
+      if (stopRequested) {
+        chrome.runtime.sendMessage({ action: "analysisStopped" });
+        window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+        isRunning = false;
+        return;
+      }
+      chrome.runtime.sendMessage({ action: "captureVisible" }, (response) => {
+        if (response?.dataUrl) {
+          screenshots.push(response.dataUrl);
+          chrome.runtime.sendMessage({
+            action: "analysisProgress",
+            current: screenshots.length,
+            total: maxShots
+          });
+        }
+
+        const nextY = y + step;
+        if (index + 1 < maxShots && nextY < docHeight - 50) {
+          captureAt(index + 1, nextY);
+        } else {
+          chrome.runtime.sendMessage({
+            action: "analysisScreenshots",
+            screenshots
+          });
+          window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+          isRunning = false;
+        }
+      });
+    }, 800);
+  };
+
+  captureAt(0, startY);
 }

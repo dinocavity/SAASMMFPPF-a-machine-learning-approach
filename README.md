@@ -38,6 +38,15 @@ psql "postgresql://postgres:postgres@localhost:5432/SAASMMFPPF"
 docker-compose exec app sh /app/scripts/build-extension.sh
 ```
 
+### Dev Watch (Docker, no rebuilds)
+Once containers are running, code changes hot-reload automatically for the API
+and the Vite dev server. For the extension UI, run a watch build that writes
+directly into `extension/`:
+```bash
+docker-compose exec app sh /app/scripts/dev-watch.sh
+```
+Then reload the extension in `chrome://extensions`.
+
 ## Run Without Docker (Local)
 Prereqs: Node 18+, Python 3.9+, Postgres 14+
 
@@ -72,7 +81,13 @@ npm install
 npm run build
 ```
 
-2) Copy `frontend/dist/*` into `extension/`.
+2) The build outputs directly into `extension/` (no manual copy needed).
+
+Tip: use watch mode during development to avoid rebuilding every time:
+```bash
+cd frontend
+npm run build:watch
+```
 
 3) Add `extension/manifest.json`:
 ```json
@@ -109,3 +124,43 @@ set `VITE_TESSERACT_LANG_PATH=/tesseract/lang-data` before building.
 - `/analyze` requires a bearer token from `/auth/login`.
 - Postgres is required for the superadmin user store.
 - Optional: set `HUGGINGFACE_TOKEN` to use the hosted sentiment API model; otherwise a lightweight fallback runs.
+
+## Analyze Reviews Flow
+User opens a product page (Shopee / Lazada / etc.), then clicks **Analyze Reviews** in the side panel:
+1. Extension scrolls to the review section.
+2. Captures screenshots of the visible review area.
+3. Extracts text via OCR.
+4. Runs fraud detection and sentiment analysis automatically.
+
+No manual screenshot. No scraping. No ToS violation.
+
+## Evaluate Models
+Use `/evaluate` to compare API vs custom sentiment models and score the authenticity classifier.
+Request body:
+```json
+{
+  "samples": [
+    {
+      "text": "Great quality and fast shipping!",
+      "sentiment_label": "positive",
+      "authenticity_label": "authentic"
+    }
+  ]
+}
+```
+Response includes accuracy, precision, recall, F1, ROC-AUC (when possible), and a confusion matrix for:
+- `sentiment_api`
+- `sentiment_custom`
+- `authenticity`
+
+## Limitations
+Panels love honesty:
+1. Screenshot quality affects OCR accuracy.
+2. Authenticity detection is probabilistic.
+3. Limited training data impacts performance.
+4. Results are platform-agnostic.
+5. OCR struggles with stylized fonts, glare, and low contrast.
+6. API sentiment requires connectivity and may throttle or time out.
+7. Heuristic linguistic signals can misfire on short or slang-heavy reviews.
+8. Models are tuned for English and may degrade on mixed languages.
+9. Evaluation metrics only reflect the quality of labeled samples provided.
