@@ -16,6 +16,8 @@ export function LoginForm() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!formData.username.trim()) return;
+
     setLoading(true);
 
     try {
@@ -32,6 +34,9 @@ export function LoginForm() {
 
   return (
     <form className="grid gap-4" onSubmit={handleSubmit}>
+      <p className="text-xs text-muted-foreground">
+        Sign in to track your analysis history.
+      </p>
       <div className="grid gap-2">
         <Label htmlFor="username">Username</Label>
         <Input
@@ -41,7 +46,7 @@ export function LoginForm() {
           onChange={(e) =>
             setFormData((prev) => ({ ...prev, username: e.target.value }))
           }
-          placeholder="Enter username"
+          placeholder="Enter any username"
           autoComplete="username"
         />
       </div>
@@ -54,11 +59,11 @@ export function LoginForm() {
           onChange={(e) =>
             setFormData((prev) => ({ ...prev, password: e.target.value }))
           }
-          placeholder="Enter password"
+          placeholder="Enter any password"
           autoComplete="current-password"
         />
       </div>
-      <Button type="submit" loading={loading}>
+      <Button type="submit" loading={loading} disabled={!formData.username.trim()}>
         {loading ? "Signing in..." : "Sign in"}
       </Button>
     </form>

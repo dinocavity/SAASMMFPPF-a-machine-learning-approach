@@ -52,6 +52,7 @@ def analyze_fraud(text):
     return {
         "is_fake": combined > 0.6,
         "confidence": float(combined),
+        "model_name": "Logistic Regression",
         "model_confidence": model_prob,
         "heuristic_confidence": heuristic_prob,
         "signals": signals,

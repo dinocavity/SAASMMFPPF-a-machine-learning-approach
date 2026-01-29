@@ -18,10 +18,10 @@ def _fallback_sentiment(text: str) -> Dict[str, Union[float, str]]:
     pos_hits = sum(word in lowered for word in POSITIVE_HINTS)
     neg_hits = sum(word in lowered for word in NEGATIVE_HINTS)
     if pos_hits == neg_hits:
-        return {"sentiment": "neutral", "confidence": 0.5}
+        return {"sentiment": "neutral", "confidence": 0.5, "model_name": "HuggingFace API"}
     sentiment = "positive" if pos_hits > neg_hits else "negative"
     confidence = 0.5 + (abs(pos_hits - neg_hits) * 0.1)
-    return {"sentiment": sentiment, "confidence": min(confidence, 0.95)}
+    return {"sentiment": sentiment, "confidence": min(confidence, 0.95), "model_name": "HuggingFace API"}
 
 
 def analyze_sentiment_api(text: str):
@@ -37,6 +37,6 @@ def analyze_sentiment_api(text: str):
         label = data[0].get("label", "").lower()
         score = float(data[0].get("score", 0.0))
         sentiment = "positive" if "pos" in label else "negative"
-        return {"sentiment": sentiment, "confidence": score}
+        return {"sentiment": sentiment, "confidence": score, "model_name": "HuggingFace API"}
 
     return _fallback_sentiment(text)
