@@ -11,4 +11,5 @@ def analyze_sentiment_custom(text):
     return {
         "sentiment": "positive" if pred == 1 else "negative",
         "confidence": float(prob),
+        "model_name": "Logistic Regression",
     }

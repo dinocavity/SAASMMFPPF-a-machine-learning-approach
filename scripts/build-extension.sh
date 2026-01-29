@@ -3,11 +3,11 @@ set -e
 
 cd /app/frontend
 npm install
-npm run build
 
-mkdir -p /app/extension
+# Clean previous build output (keep tesseract and any manual files like manifest.json)
 rm -rf /app/extension/assets /app/extension/index.html
-cp -r /app/frontend/dist/* /app/extension/
+
+npm run build
 
 mkdir -p /app/extension/tesseract
 cp /app/frontend/node_modules/tesseract.js/dist/worker.min.js /app/extension/tesseract/

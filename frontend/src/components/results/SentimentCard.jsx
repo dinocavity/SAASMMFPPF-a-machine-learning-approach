@@ -15,7 +15,28 @@ const getSentimentVariant = (sentiment) => {
   return "secondary";
 };
 
-export function SentimentCard({ title, description, sentiment, confidence }) {
+export function SentimentCard({ title, description, sentiment, confidence, status, error }) {
+  const isError = status === "error";
+
+  if (isError) {
+    return (
+      <Card className="border-dashed border-red-300 dark:border-red-800">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">{title}</CardTitle>
+          <CardDescription>Model unavailable</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Badge variant="outline" className="text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+            Error
+          </Badge>
+          <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+            {error || "This model failed to produce a result."}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const variant = getSentimentVariant(sentiment);
 
   return (
