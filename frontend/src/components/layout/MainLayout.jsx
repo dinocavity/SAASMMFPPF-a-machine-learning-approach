@@ -4,7 +4,7 @@ export function MainLayout({ children, className }) {
   return (
     <div
       className={cn(
-        "min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-cyan-50 px-4 py-6 sm:px-5 sm:py-10 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
+        "min-h-screen font-sans bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 px-4 py-6 sm:px-6 sm:py-10 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
         className
       )}
     >
@@ -17,7 +17,7 @@ export function MainLayout({ children, className }) {
 
 export function ContentGrid({ children, className }) {
   return (
-    <div className={cn("grid gap-6 lg:grid-cols-[1fr_360px]", className)}>
+    <div className={cn("grid gap-6 lg:grid-cols-[1fr_340px]", className)}>
       {children}
     </div>
   );
