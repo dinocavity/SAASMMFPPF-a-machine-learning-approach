@@ -1,15 +1,11 @@
 import os
+import re
 from collections import Counter
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from auth import authenticate_user, create_access_token, ensure_superadmin, get_current_user, get_optional_user
-from db import Base, SessionLocal, engine, get_db
-from models import User
 from evaluation import compute_binary_metrics, normalize_authenticity_label, normalize_sentiment_label
 from sentiment_api import analyze_sentiment_api
 from sentiment_custom import analyze_sentiment_custom
@@ -32,14 +28,6 @@ app.add_middleware(
 class Review(BaseModel):
     text: str
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-class UserResponse(BaseModel):
-    username: str
-    is_superadmin: bool
-
 
 class LabeledReview(BaseModel):
     text: str
@@ -50,32 +38,6 @@ class LabeledReview(BaseModel):
 class EvaluationRequest(BaseModel):
     samples: list[LabeledReview]
 
-
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        ensure_superadmin(db)
-    finally:
-        db.close()
-
-
-@app.post("/auth/login", response_model=TokenResponse)
-def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
-):
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token({"sub": user.username})
-    return TokenResponse(access_token=token)
-
-
-@app.get("/auth/me", response_model=UserResponse)
-def me(current_user: User = Depends(get_current_user)):
-    return UserResponse(username=current_user.username, is_superadmin=current_user.is_superadmin)
 
 def _run_model(fn, text, model_name):
     """Run a model function safely, returning an error result on failure."""
@@ -91,15 +53,31 @@ def _run_model(fn, text, model_name):
         }
 
 
+def _compute_text_metadata(text: str) -> dict:
+    words = text.split()
+    sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
+    word_count = len(words)
+    sentence_count = max(len(sentences), 1)
+    avg_word_length = round(sum(len(w) for w in words) / max(word_count, 1), 2)
+    avg_sentence_length = round(word_count / sentence_count, 2)
+    return {
+        "char_count": len(text),
+        "word_count": word_count,
+        "sentence_count": len(sentences),
+        "avg_word_length": avg_word_length,
+        "avg_sentence_length": avg_sentence_length,
+    }
+
+
 @app.post("/analyze")
-def analyze(review: Review, current_user: User = Depends(get_optional_user)):
+def analyze(review: Review):
     # Run all 6 models with error isolation
     fraud_api = _run_model(analyze_fraud_api, review.text, "HuggingFace API")
-    fraud_local_1 = _run_model(analyze_fraud, review.text, "Logistic Regression")
+    fraud_local_1 = _run_model(analyze_fraud, review.text, "RoBERTa")
     fraud_local_2 = _run_model(analyze_fraud_2, review.text, "Random Forest")
 
     sentiment_api = _run_model(analyze_sentiment_api, review.text, "HuggingFace API")
-    sentiment_local_1 = _run_model(analyze_sentiment_custom, review.text, "Logistic Regression")
+    sentiment_local_1 = _run_model(analyze_sentiment_custom, review.text, "RoBERTa")
     sentiment_local_2 = _run_model(analyze_sentiment_2, review.text, "SVM")
 
     # Fraud averages and consensus (only from successful models)
@@ -146,11 +124,12 @@ def analyze(review: Review, current_user: User = Depends(get_optional_user)):
             "models_ok": len(sentiment_ok),
             "models_total": 3,
         },
+        "text_metadata": _compute_text_metadata(review.text),
     }
 
 
 @app.post("/evaluate")
-def evaluate(payload: EvaluationRequest, current_user: User = Depends(get_current_user)):
+def evaluate(payload: EvaluationRequest):
     if not payload.samples:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No samples provided")
 

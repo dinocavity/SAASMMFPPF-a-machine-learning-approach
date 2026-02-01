@@ -63,4 +63,16 @@ To keep the extension UI synced while editing, run:
 ```bash
 docker-compose exec app sh /app/scripts/dev-watch.sh
 ```
+What it does: installs deps, cleans `/app/extension/assets` and
+`/app/extension/index.html`, copies Tesseract assets, then runs
+`npm run build:watch` for continuous rebuilds.
 Reload the extension in `chrome://extensions` after changes.
+
+## Docker Extension Build (One-Time)
+For a production-style build of the extension UI:
+```bash
+docker-compose exec app sh /app/scripts/build-extension.sh
+```
+What it does: installs deps, cleans `/app/extension/assets` and
+`/app/extension/index.html`, runs `npm run build`, then copies Tesseract assets
+into `/app/extension/tesseract`.

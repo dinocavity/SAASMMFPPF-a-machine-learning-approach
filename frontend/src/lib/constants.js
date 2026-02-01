@@ -24,6 +24,33 @@ export const ACTION_TYPES = {
   ANALYSIS_PROGRESS: "analysisProgress",
   ANALYSIS_SCREENSHOTS: "analysisScreenshots",
   ANALYSIS_STOPPED: "analysisStopped",
+  DETECT_PAGES: "detectPages",
+  ANALYSIS_SCROLLING: "analysisScrolling",
+  ANALYSIS_PAGE_PROGRESS: "analysisPageProgress",
+  ANALYSIS_PAGE_COMPLETE: "analysisPageComplete",
+  CONTINUE_PAGINATION: "continuePagination",
+  ANALYZE_NOW: "analyzeNow",
+  PAUSE_AFTER_PAGE: "pauseAfterPage",
+  ANALYSIS_ERROR: "analysisError",
+  GET_PRODUCT_NAME: "getProductName",
+};
+
+export const PHASES = {
+  IDLE: "idle",
+  SCROLLING: "scrolling",
+  CAPTURING: "capturing",
+  OCR: "ocr",
+  ANALYZING: "analyzing",
+  COMPLETE: "complete",
+  ERROR: "error",
+};
+
+export const PHASE_LABELS = {
+  scrolling: "Scroll",
+  capturing: "Capture",
+  ocr: "OCR",
+  analyzing: "Analyze",
+  complete: "Done",
 };
 
 export const CONFIDENCE_THRESHOLDS = {

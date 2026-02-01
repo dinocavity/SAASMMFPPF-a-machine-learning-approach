@@ -1,7 +1,8 @@
 import { SentimentCard } from "./SentimentCard";
 import { AuthenticityCard } from "./AuthenticityCard";
 import { AverageCard } from "./AverageCard";
-import { SkeletonCard } from "@/components/ui/skeleton";
+import { DataOverview } from "./DataOverview";
+import { ModelDetails } from "./ModelDetails";
 
 function SectionHeading({ children }) {
   return (
@@ -13,37 +14,24 @@ function SectionHeading({ children }) {
   );
 }
 
-export function ResultsPanel({ results, loading }) {
-  if (loading) {
-    return (
-      <div className="grid gap-4" aria-busy="true" aria-label="Loading results">
-        <SkeletonCard />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-        <SkeletonCard />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-      </div>
-    );
-  }
-
+export function ResultsDetails({ results, captureMetadata }) {
   if (!results) return null;
 
-  const { fraud, sentiment } = results;
+  const { fraud, sentiment, text_metadata } = results;
 
   return (
     <div
       className="animate-in space-y-6"
       role="region"
-      aria-label="Analysis results"
+      aria-label="Detailed analysis results"
       aria-live="polite"
     >
+      {/* Data Overview */}
+      <DataOverview
+        captureMetadata={captureMetadata}
+        textMetadata={text_metadata}
+      />
+
       {/* Fraud Detection Section */}
       <div className="space-y-4">
         <SectionHeading>Fraud Detection</SectionHeading>
@@ -53,19 +41,24 @@ export function ResultsPanel({ results, loading }) {
           result={fraud}
           type="fraud"
         />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="space-y-4">
           <AuthenticityCard
             authenticity={fraud?.models?.api}
             modelName="HuggingFace API"
           />
           <AuthenticityCard
             authenticity={fraud?.models?.local_1}
-            modelName="Logistic Regression"
+            modelName="RoBERTa"
           />
           <AuthenticityCard
             authenticity={fraud?.models?.local_2}
             modelName="Random Forest"
           />
+        </div>
+        <div className="space-y-2">
+          <ModelDetails model={fraud?.models?.api} type="fraud" />
+          <ModelDetails model={fraud?.models?.local_1} type="fraud" />
+          <ModelDetails model={fraud?.models?.local_2} type="fraud" />
         </div>
       </div>
 
@@ -78,7 +71,7 @@ export function ResultsPanel({ results, loading }) {
           result={sentiment}
           type="sentiment"
         />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="space-y-4">
           <SentimentCard
             title="HuggingFace API"
             description="Hosted transformer model"
@@ -88,8 +81,8 @@ export function ResultsPanel({ results, loading }) {
             error={sentiment?.models?.api?.error}
           />
           <SentimentCard
-            title="Logistic Regression"
-            description="Local trained model"
+            title="RoBERTa"
+            description="Local RoBERTa transformer"
             sentiment={sentiment?.models?.local_1?.sentiment}
             confidence={sentiment?.models?.local_1?.confidence}
             status={sentiment?.models?.local_1?.status}
@@ -103,6 +96,11 @@ export function ResultsPanel({ results, loading }) {
             status={sentiment?.models?.local_2?.status}
             error={sentiment?.models?.local_2?.error}
           />
+        </div>
+        <div className="space-y-2">
+          <ModelDetails model={sentiment?.models?.api} type="sentiment" />
+          <ModelDetails model={sentiment?.models?.local_1} type="sentiment" />
+          <ModelDetails model={sentiment?.models?.local_2} type="sentiment" />
         </div>
       </div>
     </div>

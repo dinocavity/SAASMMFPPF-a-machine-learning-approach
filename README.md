@@ -37,6 +37,10 @@ psql "postgresql://postgres:postgres@localhost:5433/SAASMMFPPF"
 ```bash
 docker-compose exec app sh /app/scripts/build-extension.sh
 ```
+What it does: one-time production build of the extension UI. Installs deps,
+cleans `/app/extension/assets` and `/app/extension/index.html`, runs
+`npm run build`, then copies required Tesseract files into
+`/app/extension/tesseract/`.
 
 ### Dev Watch (Docker, no rebuilds)
 Once containers are running, code changes hot-reload automatically for the API
@@ -45,6 +49,8 @@ directly into `extension/`:
 ```bash
 docker-compose exec app sh /app/scripts/dev-watch.sh
 ```
+What it does: same setup/clean step and Tesseract copy, then runs
+`npm run build:watch` for continuous rebuilds while you edit.
 Then reload the extension in `chrome://extensions`.
 
 ## Run Without Docker (Local)
@@ -127,12 +133,13 @@ set `VITE_TESSERACT_LANG_PATH=/tesseract/lang-data` before building.
 - Optional: set `HUGGINGFACE_TOKEN` to use the hosted sentiment API model; otherwise a lightweight fallback runs.
 
 ## Analyze Reviews Flow
-User opens a product page (Shopee / Lazada / etc.), then clicks **Analyze Reviews** in the side panel:
-1. Extension scrolls to the review section.
-2. (Optional) Paginate reviews from the toggle, pausing after each page if enabled.
-3. Captures screenshots of the visible review area.
-4. Extracts text via OCR.
-5. Runs fraud detection and sentiment analysis automatically.
+User opens a product page (Shopee / Lazada / etc.), then clicks **Capture & Analyze Reviews** in the side panel:
+1. Extension detects how many review pages exist on the product page.
+2. If more than one page is found, a slider lets the user choose how many pages to capture (1 to N).
+3. Extension scrolls to the review section and captures screenshots of the visible review area.
+4. If multiple pages were selected, the extension clicks through pagination buttons and captures each page in sequence.
+5. Extracts text from all captured screenshots via OCR.
+6. Runs fraud detection and sentiment analysis automatically across 6 models.
 
 No manual screenshot. No scraping. No ToS violation.
 
@@ -151,9 +158,12 @@ Request body:
 }
 ```
 Response includes accuracy, precision, recall, F1, ROC-AUC (when possible), and a confusion matrix for:
-- `sentiment_api`
-- `sentiment_custom`
-- `authenticity`
+- `sentiment_api` — HuggingFace API sentiment model
+- `sentiment_custom` — RoBERTa local sentiment model
+- `sentiment_svm` — SVM local sentiment model
+- `authenticity_lr` — RoBERTa local fraud model
+- `authenticity_rf` — Random Forest local fraud model
+- `authenticity_api` — HuggingFace API fraud model
 
 ## Limitations
 1. Screenshot quality affects OCR accuracy.

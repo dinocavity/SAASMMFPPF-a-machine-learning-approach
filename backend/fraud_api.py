@@ -14,16 +14,18 @@ GENUINE_HINTS = {
     "okay", "average", "not bad", "decent", "broke", "poor", "returned",
 }
 
+DECISION_THRESHOLD = 0.5
+
 
 def _fallback_fraud(text: str) -> Dict[str, Union[bool, float, str]]:
     lowered = text.lower()
-    fake_hits = sum(phrase in lowered for phrase in FAKE_HINTS)
-    genuine_hits = sum(phrase in lowered for phrase in GENUINE_HINTS)
+    fake_hits = [phrase for phrase in FAKE_HINTS if phrase in lowered]
+    genuine_hits = [phrase for phrase in GENUINE_HINTS if phrase in lowered]
     exclamations = text.count("!")
 
     score = 0.5
-    score += fake_hits * 0.12
-    score -= genuine_hits * 0.12
+    score += len(fake_hits) * 0.12
+    score -= len(genuine_hits) * 0.12
     score += min(exclamations / 10.0, 0.15)
 
     if len(text) < 30:
@@ -32,9 +34,16 @@ def _fallback_fraud(text: str) -> Dict[str, Union[bool, float, str]]:
     score = max(0.0, min(score, 1.0))
 
     return {
-        "is_fake": score > 0.5,
+        "is_fake": score > DECISION_THRESHOLD,
         "confidence": score,
         "model_name": "HuggingFace API",
+        "is_fallback": True,
+        "decision_threshold": DECISION_THRESHOLD,
+        "keyword_matches": {
+            "fake_keywords": fake_hits,
+            "genuine_keywords": genuine_hits,
+            "exclamation_count": exclamations,
+        },
     }
 
 
@@ -67,6 +76,12 @@ def analyze_fraud_api(text: str) -> Dict[str, Union[bool, float, str]]:
                 "is_fake": is_fake,
                 "confidence": confidence,
                 "model_name": "HuggingFace API",
+                "is_fallback": False,
+                "decision_threshold": 0.7,
+                "raw_scores": {
+                    "LABEL_0": round(negative_score, 4),
+                    "LABEL_1": round(positive_score, 4),
+                },
             }
     except Exception:
         pass

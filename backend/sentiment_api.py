@@ -15,13 +15,28 @@ NEGATIVE_HINTS = {"bad", "terrible", "awful", "hate", "broken", "worst", "poor"}
 
 def _fallback_sentiment(text: str) -> Dict[str, Union[float, str]]:
     lowered = text.lower()
-    pos_hits = sum(word in lowered for word in POSITIVE_HINTS)
-    neg_hits = sum(word in lowered for word in NEGATIVE_HINTS)
-    if pos_hits == neg_hits:
-        return {"sentiment": "neutral", "confidence": 0.5, "model_name": "HuggingFace API"}
-    sentiment = "positive" if pos_hits > neg_hits else "negative"
-    confidence = 0.5 + (abs(pos_hits - neg_hits) * 0.1)
-    return {"sentiment": sentiment, "confidence": min(confidence, 0.95), "model_name": "HuggingFace API"}
+    pos_hits = [word for word in POSITIVE_HINTS if word in lowered]
+    neg_hits = [word for word in NEGATIVE_HINTS if word in lowered]
+
+    if len(pos_hits) == len(neg_hits):
+        return {
+            "sentiment": "neutral",
+            "confidence": 0.5,
+            "model_name": "HuggingFace API",
+            "is_fallback": True,
+            "keyword_matches": {"positive_keywords": pos_hits, "negative_keywords": neg_hits},
+        }
+
+    sentiment = "positive" if len(pos_hits) > len(neg_hits) else "negative"
+    confidence = 0.5 + (abs(len(pos_hits) - len(neg_hits)) * 0.1)
+
+    return {
+        "sentiment": sentiment,
+        "confidence": min(confidence, 0.95),
+        "model_name": "HuggingFace API",
+        "is_fallback": True,
+        "keyword_matches": {"positive_keywords": pos_hits, "negative_keywords": neg_hits},
+    }
 
 
 def analyze_sentiment_api(text: str):
@@ -29,14 +44,28 @@ def analyze_sentiment_api(text: str):
         return _fallback_sentiment(text)
 
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    response = requests.post(HF_MODEL, headers=headers, json={"inputs": text}, timeout=15)
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.post(HF_MODEL, headers=headers, json={"inputs": text}, timeout=15)
+        response.raise_for_status()
+        data = response.json()
 
-    if isinstance(data, list) and data:
-        label = data[0].get("label", "").lower()
-        score = float(data[0].get("score", 0.0))
-        sentiment = "positive" if "pos" in label else "negative"
-        return {"sentiment": sentiment, "confidence": score, "model_name": "HuggingFace API"}
+        if isinstance(data, list) and data:
+            results = data[0] if isinstance(data[0], list) else data
+            raw_api_scores = {item["label"]: round(item["score"], 4) for item in results}
+
+            best = max(results, key=lambda x: x["score"])
+            label = best.get("label", "").lower()
+            score = float(best.get("score", 0.0))
+            sentiment = "positive" if "pos" in label else "negative"
+
+            return {
+                "sentiment": sentiment,
+                "confidence": score,
+                "model_name": "HuggingFace API",
+                "is_fallback": False,
+                "raw_api_scores": raw_api_scores,
+            }
+    except Exception:
+        pass
 
     return _fallback_sentiment(text)

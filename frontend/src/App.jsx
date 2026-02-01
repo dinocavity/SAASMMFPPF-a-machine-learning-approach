@@ -4,7 +4,8 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Toaster } from "@/components/ui/toaster";
 import { HomePage } from "@/pages/HomePage";
 import { ResultsPage } from "@/pages/ResultsPage";
-import { AccountPage } from "@/pages/AccountPage";
+import { ResultsDetailsPage } from "@/pages/ResultsDetailsPage";
+import { HistoryPage } from "@/pages/HistoryPage";
 
 function App() {
   return (
@@ -13,7 +14,8 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/results" element={<ResultsPage />} />
-        <Route path="/account" element={<AccountPage />} />
+        <Route path="/results/details" element={<ResultsDetailsPage />} />
+        <Route path="/history" element={<HistoryPage />} />
       </Routes>
       <Toaster />
     </MainLayout>

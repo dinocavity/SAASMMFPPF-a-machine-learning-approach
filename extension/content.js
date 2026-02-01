@@ -14,6 +14,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     continuePagination();
     sendResponse({ success: true });
   }
+  if (request.action === "pauseAfterPage") {
+    pauseAfterPage();
+    sendResponse({ success: true });
+  }
+  if (request.action === "analyzeNow") {
+    analyzeNow();
+    sendResponse({ success: true });
+  }
   if (request.action === "stopAutoAnalyze") {
     console.log('Stop auto analyze triggered');
     stopRequested = true;
@@ -30,8 +38,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     sendResponse({ success: true });
   }
+  if (request.action === "detectPages") {
+    cacheRatingsAnchor();
+    const totalPages = detectTotalPages();
+    sendResponse({ totalPages });
+  }
+  if (request.action === "getProductName") {
+    const productName = extractProductName();
+    const pageUrl = window.location.href;
+    sendResponse({ productName, pageUrl });
+  }
   return true;
 });
+
+function extractProductName() {
+  // Shopee product title
+  const shopeeTitle = document.querySelector(
+    "div.product-briefing span, [class*='product-briefing'] span, [data-sqe='name'] span"
+  );
+  if (shopeeTitle?.textContent?.trim()) return shopeeTitle.textContent.trim();
+
+  // OpenGraph title meta tag
+  const ogTitle = document.querySelector('meta[property="og:title"]');
+  if (ogTitle?.content?.trim()) return ogTitle.content.trim();
+
+  // Amazon product title
+  const amazonTitle = document.querySelector("#productTitle, #title span");
+  if (amazonTitle?.textContent?.trim()) return amazonTitle.textContent.trim();
+
+  // Generic h1
+  const h1 = document.querySelector("h1");
+  if (h1?.textContent?.trim()) return h1.textContent.trim();
+
+  // Fallback to document title
+  return document.title || null;
+}
 
 let ratingsAnchor = null;
 let isRunning = false;
@@ -41,9 +82,126 @@ let captureTimeoutId = null;
 let lastErrorSent = "";
 let paginationEnabled = false;
 let pauseEachPage = false;
+let pauseAfterCurrentPage = false;
 let currentPageIndex = 1;
+let maxPages = Infinity;
 let allScreenshots = [];
 let pendingContinue = null;
+let analyzeAfterCurrentPage = false;
+let isCapturingPage = false;
+let pageScreenshotCounts = [];
+let firstCaptureTimeoutId = null;
+let totalPagesForUi = null;
+
+function detectTotalPages() {
+  // Helper: check if an element's text is an ellipsis
+  const isEllipsis = (el) => /^(\u2026|[.]{2,}|\.{3,})$/.test(el.textContent.trim());
+
+  // Helper: extract page numbers from a list of elements, including after ellipsis
+  const extractMaxPage = (elements) => {
+    const nums = [];
+    let hasEllipsis = false;
+    let lastEllipsisIndex = -1;
+    let lastNumIndex = -1;
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
+      if (isEllipsis(el)) {
+        hasEllipsis = true;
+        lastEllipsisIndex = i;
+        continue;
+      }
+      const n = Number.parseInt(el.textContent.trim(), 10);
+      if (Number.isFinite(n) && n > 0) {
+        nums.push(n);
+        lastNumIndex = i;
+      }
+    }
+    if (!nums.length) {
+      return hasEllipsis ? -1 : 0;
+    }
+    // If there's an ellipsis but no number appears after the last ellipsis,
+    // the true total is unknown (pages are revealed progressively)
+    if (hasEllipsis && lastNumIndex < lastEllipsisIndex) {
+      return -1;
+    }
+    // If a number appears after the ellipsis (e.g. "1 2 ... 20"), that's the total
+    if (hasEllipsis && lastNumIndex > lastEllipsisIndex) {
+      return Math.max(...nums);
+    }
+    // No ellipsis — the visible numbers are all there is
+    return Math.max(...nums);
+  };
+
+  // Helper: check if a "Next" button exists in the pagination area
+  const hasNextButton = () => {
+    const candidates = Array.from(
+      document.querySelectorAll(
+        "button.shopee-button-no-outline, [class*='pagination'] button, [class*='pagination'] a, nav[aria-label*='page'] button, nav[aria-label*='page'] a"
+      )
+    );
+    return candidates.some((el) => {
+      const text = el.textContent.trim().toLowerCase();
+      const label = (el.getAttribute("aria-label") || "").toLowerCase();
+      return (
+        text === "next" || text === ">" || text === "\u203a" || text === "\u00bb" ||
+        label.includes("next")
+      );
+    });
+  };
+
+  // Try Shopee-style numbered pagination buttons
+  const shopeeButtons = Array.from(
+    document.querySelectorAll("button.shopee-button-no-outline")
+  );
+  if (shopeeButtons.length) {
+    // Check if any sibling is a next/prev arrow — indicates more pages exist
+    const hasArrowSibling = shopeeButtons.some((btn) => {
+      const text = btn.textContent.trim();
+      return text === ">" || text === "<" || text === "\u203a" || text === "\u2039" || text === "\u00bb" || text === "\u00ab";
+    });
+
+    // Also include sibling elements (ellipsis spans) in the pagination container
+    const container = shopeeButtons[0].parentElement;
+    const siblings = container ? Array.from(container.children) : shopeeButtons;
+    const maxPage = extractMaxPage(siblings);
+    if (maxPage === -1) return -1;
+    // If there's an arrow button, pages are progressively revealed — total unknown
+    if (hasArrowSibling && maxPage > 0) return -1;
+    if (maxPage > 0) return maxPage;
+    // Fallback to just the buttons themselves
+    const btnMax = extractMaxPage(shopeeButtons);
+    if (hasArrowSibling && btnMax > 0) return -1;
+    if (btnMax > 0) return btnMax;
+  }
+
+  // Generic fallback: look for any pagination container with numbered buttons/links
+  const paginationSelectors = [
+    "[class*='pagination'] button",
+    "[class*='pagination'] a",
+    "[class*='pager'] button",
+    "[class*='pager'] a",
+    "nav[aria-label*='page'] button",
+    "nav[aria-label*='page'] a",
+  ];
+
+  for (const selector of paginationSelectors) {
+    const els = Array.from(document.querySelectorAll(selector));
+    if (!els.length) continue;
+    // Include siblings in the container for ellipsis detection
+    const container = els[0].parentElement;
+    const siblings = container ? Array.from(container.children) : els;
+    const maxPage = extractMaxPage(siblings);
+    if (maxPage > 0) return maxPage;
+    if (maxPage === -1) return -1;
+  }
+
+  // Last resort: if a Next button exists, pages are unknown
+  if (hasNextButton()) {
+    return -1;
+  }
+
+  return 1;
+}
 
 function sendAnalysisError(message) {
   if (!message || message === lastErrorSent) return;
@@ -60,9 +218,8 @@ function startFlow() {
   isRunning = true;
   cacheRatingsAnchor();
   if (!ratingsAnchor) {
-    isRunning = false;
-    sendAnalysisError("Ratings section not found. Scroll to reviews and try again.");
-    return;
+    console.warn("Ratings anchor not found. Falling back to current view.");
+    ratingsAnchor = document.body;
   }
 
   scrollRatingsToTop();
@@ -81,18 +238,50 @@ function startAutoAnalyze(pagination) {
   lastErrorSent = "";
   paginationEnabled = !!pagination?.enabled;
   pauseEachPage = !!pagination?.pauseEachPage;
+  pauseAfterCurrentPage = false;
+  maxPages = pagination?.maxPages || Infinity;
+  const totalPagesKnown = pagination?.totalPagesKnown;
+  totalPagesForUi = Number.isFinite(maxPages) && maxPages < 9999
+    ? maxPages
+    : (Number.isFinite(totalPagesKnown) ? totalPagesKnown : null);
   currentPageIndex = 1;
   allScreenshots = [];
   pendingContinue = null;
+  analyzeAfterCurrentPage = false;
+  isCapturingPage = false;
+  pageScreenshotCounts = [];
+  if (firstCaptureTimeoutId) {
+    clearTimeout(firstCaptureTimeoutId);
+    firstCaptureTimeoutId = null;
+  }
   originalScrollY = window.scrollY;
   cacheRatingsAnchor();
   if (!ratingsAnchor) {
-    isRunning = false;
-    sendAnalysisError("Ratings section not found. Scroll to reviews and try again.");
-    return;
+    console.warn("Ratings anchor not found. Falling back to current view.");
+    ratingsAnchor = document.body;
   }
 
   scrollRatingsToTop();
+  chrome.runtime.sendMessage({ action: "analysisScrolling" });
+  // Kick off initial progress so UI knows capture is starting
+  chrome.runtime.sendMessage({
+    action: "analysisProgress",
+    current: 0,
+    total: 8,
+    page: currentPageIndex,
+    pageTotal: totalPagesForUi,
+  });
+  if (firstCaptureTimeoutId) {
+    clearTimeout(firstCaptureTimeoutId);
+  }
+  firstCaptureTimeoutId = setTimeout(() => {
+    if (isRunning && allScreenshots.length === 0) {
+      sendAnalysisError("Capture did not start. Please try again.");
+      chrome.runtime.sendMessage({ action: "analysisStopped" });
+      window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+      isRunning = false;
+    }
+  }, 8000);
   setTimeout(() => captureReviewScreenshots(handlePageCaptured), 2000);
 }
 
@@ -256,9 +445,11 @@ function captureReviewScreenshots(onComplete) {
   const docHeight = document.documentElement.scrollHeight;
   const startY = window.scrollY;
   const screenshots = [];
+  isCapturingPage = true;
 
   const captureAt = (index, y) => {
     if (stopRequested) {
+      isCapturingPage = false;
       chrome.runtime.sendMessage({ action: "analysisStopped" });
       window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
       isRunning = false;
@@ -268,15 +459,33 @@ function captureReviewScreenshots(onComplete) {
     window.scrollTo({ top: y, behavior: 'smooth' });
     captureTimeoutId = setTimeout(() => {
       if (stopRequested) {
+        isCapturingPage = false;
         chrome.runtime.sendMessage({ action: "analysisStopped" });
         window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
         isRunning = false;
         return;
       }
-      chrome.runtime.sendMessage({ action: "captureVisible" }, (response) => {
-        if (response?.error) {
-          sendAnalysisError(`Capture failed: ${response.error}`);
+      try {
+        console.log("captureVisible: request", { index, y });
+        let responded = false;
+        const timeoutId = setTimeout(() => {
+          if (responded) return;
+          responded = true;
+          console.warn("captureVisible: response timeout");
+          sendAnalysisError("Capture timed out. Please try again.");
           chrome.runtime.sendMessage({ action: "analysisStopped" });
+          window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+          isRunning = false;
+        }, 3000);
+
+        chrome.runtime.sendMessage({ action: "captureVisible" }, (response) => {
+          if (responded) return;
+          responded = true;
+          clearTimeout(timeoutId);
+          console.log("captureVisible: response", response);
+          if (response?.error) {
+            sendAnalysisError(`Capture failed: ${response.error}`);
+            chrome.runtime.sendMessage({ action: "analysisStopped" });
           window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
           isRunning = false;
           return;
@@ -284,10 +493,16 @@ function captureReviewScreenshots(onComplete) {
 
         if (response?.dataUrl) {
           screenshots.push(response.dataUrl);
+          if (firstCaptureTimeoutId) {
+            clearTimeout(firstCaptureTimeoutId);
+            firstCaptureTimeoutId = null;
+          }
           chrome.runtime.sendMessage({
             action: "analysisProgress",
             current: screenshots.length,
-            total: maxShots
+            total: maxShots,
+            page: currentPageIndex,
+            pageTotal: totalPagesForUi
           });
         }
 
@@ -295,6 +510,7 @@ function captureReviewScreenshots(onComplete) {
         if (index + 1 < maxShots && nextY < docHeight - 50) {
           captureAt(index + 1, nextY);
         } else {
+          isCapturingPage = false;
           if (typeof onComplete === "function") {
             onComplete(screenshots);
           } else {
@@ -306,7 +522,13 @@ function captureReviewScreenshots(onComplete) {
             isRunning = false;
           }
         }
-      });
+        });
+      } catch (err) {
+        sendAnalysisError(`Capture failed: ${err?.message || "unknown error"}`);
+        chrome.runtime.sendMessage({ action: "analysisStopped" });
+        window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+        isRunning = false;
+      }
     }, 800);
   };
 
@@ -322,22 +544,41 @@ function handlePageCaptured(screenshots) {
   }
 
   allScreenshots.push(...screenshots);
+  pageScreenshotCounts[currentPageIndex - 1] = screenshots.length;
 
   if (!paginationEnabled) {
     chrome.runtime.sendMessage({
       action: "analysisScreenshots",
-      screenshots: allScreenshots
+      screenshots: allScreenshots,
+      pagesCaptured: currentPageIndex,
+      pageScreenshotCounts,
     });
     window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
     isRunning = false;
     return;
   }
 
-  if (pauseEachPage) {
+  if (analyzeAfterCurrentPage) {
+    analyzeAfterCurrentPage = false;
+    chrome.runtime.sendMessage({
+      action: "analysisScreenshots",
+      screenshots: allScreenshots,
+      pagesCaptured: currentPageIndex,
+      pageScreenshotCounts,
+    });
+    window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+    isRunning = false;
+    return;
+  }
+
+  if (pauseEachPage || pauseAfterCurrentPage) {
+    pauseAfterCurrentPage = false;
     pendingContinue = () => proceedToNextPage();
     chrome.runtime.sendMessage({
       action: "analysisPageComplete",
-      page: currentPageIndex
+      page: currentPageIndex,
+      totalScreenshots: allScreenshots.length,
+      pageScreenshotCount: screenshots.length,
     });
     return;
   }
@@ -349,13 +590,64 @@ function continuePagination() {
   if (typeof pendingContinue === "function") {
     const fn = pendingContinue;
     pendingContinue = null;
+    pauseAfterCurrentPage = false;
     fn();
   }
+}
+
+function analyzeNow() {
+  analyzeAfterCurrentPage = true;
+  pauseAfterCurrentPage = false;
+
+  if (pendingContinue) {
+    pendingContinue = null;
+    const screenshots = allScreenshots.slice();
+    allScreenshots = [];
+    chrome.runtime.sendMessage({
+      action: "analysisScreenshots",
+      screenshots,
+      pagesCaptured: currentPageIndex,
+      pageScreenshotCounts,
+    });
+    window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+    isRunning = false;
+    return;
+  }
+
+  if (!isCapturingPage) {
+    const screenshots = allScreenshots.slice();
+    allScreenshots = [];
+    chrome.runtime.sendMessage({
+      action: "analysisScreenshots",
+      screenshots,
+      pagesCaptured: currentPageIndex,
+      pageScreenshotCounts,
+    });
+    window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+    isRunning = false;
+  }
+}
+
+function pauseAfterPage() {
+  pauseAfterCurrentPage = true;
 }
 
 function proceedToNextPage() {
   if (stopRequested) {
     chrome.runtime.sendMessage({ action: "analysisStopped" });
+    window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+    isRunning = false;
+    return;
+  }
+
+  // Stop if we've reached the max pages the user selected
+  if (currentPageIndex >= maxPages) {
+    chrome.runtime.sendMessage({
+      action: "analysisScreenshots",
+      screenshots: allScreenshots,
+      pagesCaptured: currentPageIndex,
+      pageScreenshotCounts,
+    });
     window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
     isRunning = false;
     return;
@@ -370,7 +662,9 @@ function proceedToNextPage() {
       }
       chrome.runtime.sendMessage({
         action: "analysisScreenshots",
-        screenshots: allScreenshots
+        screenshots: allScreenshots,
+        pagesCaptured: currentPageIndex,
+        pageScreenshotCounts,
       });
       window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
       isRunning = false;

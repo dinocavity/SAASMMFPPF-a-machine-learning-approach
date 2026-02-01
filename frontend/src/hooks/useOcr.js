@@ -7,14 +7,19 @@ export function useOcr() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const cancelRef = useRef(false);
+  const stopAfterCurrentRef = useRef(false);
+  const stoppedEarlyRef = useRef(false);
 
   const processScreenshots = useCallback(async (screenshots, onProgress) => {
     setLoading(true);
     setError("");
     setProgress(0);
     cancelRef.current = false;
+    stopAfterCurrentRef.current = false;
+    stoppedEarlyRef.current = false;
 
     const extractedBlocks = [];
+    let lastIndex = -1;
 
     try {
       for (let index = 0; index < screenshots.length; index++) {
@@ -24,6 +29,7 @@ export function useOcr() {
 
         const result = await Tesseract.recognize(screenshots[index], "eng", {
           logger: (message) => {
+            if (cancelRef.current) return;
             if (message.status === "recognizing text") {
               const itemProgress = Math.round(message.progress * 100);
               const overall = Math.round(
@@ -41,10 +47,17 @@ export function useOcr() {
         });
 
         extractedBlocks.push(result.data.text.trim());
+        lastIndex = index;
+
+        if (stopAfterCurrentRef.current) {
+          stoppedEarlyRef.current = true;
+          break;
+        }
       }
 
       const combined = extractedBlocks.filter(Boolean).join("\n\n");
-      return combined;
+      const nextIndex = stoppedEarlyRef.current ? lastIndex + 1 : screenshots.length;
+      return { text: combined, stoppedEarly: stoppedEarlyRef.current, nextIndex };
     } catch (err) {
       if (err.message === "OCR cancelled") {
         setError("OCR was cancelled");
@@ -57,8 +70,21 @@ export function useOcr() {
     }
   }, []);
 
+  const stopAfterCurrent = useCallback(() => {
+    stopAfterCurrentRef.current = true;
+  }, []);
+
+  const wasStoppedEarly = useCallback(() => stoppedEarlyRef.current, []);
+
   const cancel = useCallback(() => {
     cancelRef.current = true;
+  }, []);
+
+  const terminateNow = useCallback(() => {
+    cancelRef.current = true;
+    stopAfterCurrentRef.current = false;
+    setLoading(false);
+    setProgress(0);
   }, []);
 
   const reset = useCallback(() => {
@@ -66,6 +92,8 @@ export function useOcr() {
     setProgress(0);
     setError("");
     cancelRef.current = false;
+    stopAfterCurrentRef.current = false;
+    stoppedEarlyRef.current = false;
   }, []);
 
   return {
@@ -73,7 +101,10 @@ export function useOcr() {
     progress,
     error,
     processScreenshots,
+    stopAfterCurrent,
+    wasStoppedEarly,
     cancel,
+    terminateNow,
     reset,
   };
 }
