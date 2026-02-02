@@ -43,6 +43,7 @@ export function useAnalysis() {
 
   // Page URL state
   const [pageUrl, setPageUrl] = useState(null);
+  const [analysisSource, setAnalysisSource] = useState({ url: null, productName: null });
 
   // Current tab URL & supported-page detection
   const [currentTabUrl, setCurrentTabUrl] = useState(null);
@@ -100,9 +101,9 @@ export function useAnalysis() {
         return /\/dp\//.test(pathname) || /\/gp\/product\//.test(pathname);
       }
 
-      // TikTok Shop product pages: /product/ in pathname
+      // TikTok Shop product pages: /product/ or /shop/.../pdp/ in pathname
       if (hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com')) {
-        return /\/product\//.test(pathname);
+        return /\/product\//.test(pathname) || /\/shop\/.+\/pdp\//.test(pathname) || /\/pdp\//.test(pathname);
       }
 
       return false;
@@ -157,6 +158,7 @@ export function useAnalysis() {
     setProductName(null);
     productNameRef.current = null;
     setPageUrl(null);
+    setAnalysisSource({ url: null, productName: null });
     setPhase(PHASES.IDLE);
     setPhaseProgress(0);
     setPhaseDetail("");
@@ -562,7 +564,7 @@ export function useAnalysis() {
   );
 
   const startCapture = useCallback(
-    (pagesToCapture) => {
+    async (pagesToCapture) => {
       const pages = pagesToCapture || selectedPages;
       setAutoFlowStatus("Starting review capture...");
       setAutoFlowActive(true);
@@ -601,8 +603,12 @@ export function useAnalysis() {
         }
       }, 30000);
 
-      // Fetch product name before starting capture
-      fetchProductName();
+      // Capture source URL/name snapshot before starting capture
+      const source = await fetchProductName();
+      setAnalysisSource({
+        url: source?.pageUrl ?? pageUrl,
+        productName: source?.productName ?? productName,
+      });
 
       const pagination =
         pages > 1 || pages === Infinity
@@ -630,7 +636,7 @@ export function useAnalysis() {
         }
       );
     },
-    [toast, selectedPages, fetchProductName]
+    [toast, selectedPages, fetchProductName, pageUrl, productName]
   );
 
   const continueCapture = useCallback(() => {
@@ -814,6 +820,7 @@ export function useAnalysis() {
     captureMetadata,
     productName,
     pageUrl,
+    analysisSource,
     currentTabUrl,
     currentPlatform,
     isSupportedPage,

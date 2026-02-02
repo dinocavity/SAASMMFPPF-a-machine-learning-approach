@@ -158,6 +158,7 @@ export function HomePage() {
     captureMetadata,
     productName,
     pageUrl,
+    analysisSource,
     fetchProductName,
     resultsSaved,
     setResultsSaved,
@@ -198,8 +199,8 @@ export function HomePage() {
     if (results && !loading && !autoFlowActive && !savedRef.current && !resultsSaved) {
       savedRef.current = true;
       addEntry({
-        url: pageUrl,
-        productName,
+        url: analysisSource?.url || pageUrl,
+        productName: analysisSource?.productName || productName,
         results,
         captureMetadata,
       });

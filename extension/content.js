@@ -1,4 +1,9 @@
-﻿// content.js
+// content.js
+if (globalThis.__saasmmfppfContentLoaded) {
+  console.debug("content.js already loaded; skipping re-init");
+} else {
+  globalThis.__saasmmfppfContentLoaded = true;
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "scrollToReviews") {
     console.log('Scroll to reviews triggered');
@@ -336,7 +341,9 @@ function cacheRatingsAnchor() {
     // TikTok Shop review selectors
     "[data-e2e='product-review']",
     "[class*='ReviewList']",
-    "[class*='review-list']",
+    "[class*='review-list']",
+    "[class*='review-filter-container']",
+    "[class*='review-filter']",
   ];
 
   for (const selector of selectorCandidates) {
@@ -365,10 +372,18 @@ function cacheRatingsAnchor() {
     'å•†å“è©•åƒ¹',
     'ÄÃ¡nh giÃ¡ sáº£n pháº©m'
   ];
+  const includeMatchers = [
+    (text) => text.includes('global reviews'),
+    (text) => text.includes('photos from reviews'),
+    (text) => text.includes('displaying') && text.includes('reviews'),
+  ];
 
   for (const el of document.querySelectorAll('*')) {
     const text = el.textContent.trim();
-    if (keywords.some(k => text === k || text.startsWith(k))) {
+    const lower = text.toLowerCase();
+    const matchesKeyword = keywords.some(k => text === k || text.startsWith(k));
+    const matchesInclude = includeMatchers.some((fn) => fn(lower));
+    if (matchesKeyword || matchesInclude) {
       let parent = el;
       while (parent && parent !== document.body) {
         if (
@@ -788,7 +803,15 @@ function clickNextPageButton() {
     }
   }
 
-  const buttons = Array.from(document.querySelectorAll("button"));
+  
+  // TikTok-style pagination: clickable div with 'Next' text and cursor-pointer
+  const nextDivs = Array.from(document.querySelectorAll("div.cursor-pointer"));
+  const nextDiv = nextDivs.find((el) => el.textContent.trim() === "Next");
+  if (nextDiv) {
+    nextDiv.click();
+    return true;
+  }
+const buttons = Array.from(document.querySelectorAll("button"));
   const nextText = new Set(["Next", "Next Page", ">", "›", "»"]);
   const nextBtn = buttons.find((btn) => {
     const text = btn.textContent.trim();
@@ -806,3 +829,5 @@ function clickNextPageButton() {
   return false;
 }
 
+
+}
