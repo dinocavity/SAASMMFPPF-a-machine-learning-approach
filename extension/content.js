@@ -58,6 +58,12 @@ function extractProductName() {
   );
   if (shopeeTitle?.textContent?.trim()) return shopeeTitle.textContent.trim();
 
+  // TikTok Shop product title
+  const tiktokTitle = document.querySelector(
+    "[data-e2e='product-title'], [class*='product-title'] h1, [class*='ProductTitle']"
+  );
+  if (tiktokTitle?.textContent?.trim()) return tiktokTitle.textContent.trim();
+
   // OpenGraph title meta tag
   const ogTitle = document.querySelector('meta[property="og:title"]');
   if (ogTitle?.content?.trim()) return ogTitle.content.trim();
@@ -174,6 +180,28 @@ function detectTotalPages() {
     if (btnMax > 0) return btnMax;
   }
 
+  // Lazada/Ant Design pagination
+  const antItems = Array.from(
+    document.querySelectorAll(
+      ".ant-pagination-item, .lzd-pagination li, ul[class*='pagination'] li, .iweb-pagination-item, .iweb-pagination li"
+    )
+  );
+  if (antItems.length) {
+    const maxPage = extractMaxPage(antItems);
+    if (maxPage > 0) return maxPage;
+    if (maxPage === -1) return -1;
+  }
+
+  // Amazon pagination
+  const amazonPagItems = Array.from(
+    document.querySelectorAll(".a-pagination li")
+  );
+  if (amazonPagItems.length) {
+    const maxPage = extractMaxPage(amazonPagItems);
+    if (maxPage > 0) return maxPage;
+    if (maxPage === -1) return -1;
+  }
+
   // Generic fallback: look for any pagination container with numbered buttons/links
   const paginationSelectors = [
     "[class*='pagination'] button",
@@ -182,6 +210,12 @@ function detectTotalPages() {
     "[class*='pager'] a",
     "nav[aria-label*='page'] button",
     "nav[aria-label*='page'] a",
+    ".ant-pagination-item a",
+    ".ant-pagination-item",
+    ".lzd-pagination a",
+    ".lzd-pagination li",
+    ".iweb-pagination-item",
+    ".iweb-pagination-item a",
   ];
 
   for (const selector of paginationSelectors) {
@@ -295,6 +329,14 @@ function cacheRatingsAnchor() {
     "[class*='product-rating']",
     "[class*='product-ratings']",
     "section[id*='rating']",
+    // Amazon review selectors
+    "#reviews-medley-footer",
+    "#customer-reviews",
+    "[data-hook='reviews-medley-footer']",
+    // TikTok Shop review selectors
+    "[data-e2e='product-review']",
+    "[class*='ReviewList']",
+    "[class*='review-list']",
   ];
 
   for (const selector of selectorCandidates) {
@@ -316,6 +358,9 @@ function cacheRatingsAnchor() {
     'Rating and Reviews',
     'Ratings Produk',
     'Penilaian Produk',
+    'Customer Reviews',
+    'Top reviews',
+    'Reviews',
     'ç”¢å“è©•åƒ¹',
     'å•†å“è©•åƒ¹',
     'ÄÃ¡nh giÃ¡ sáº£n pháº©m'
@@ -718,6 +763,21 @@ function clickNextPageButton() {
     "button.shopee-button-no-outline[aria-label='Next Page']",
     "button.shopee-button-no-outline[aria-label='Next']",
     "button.shopee-button-solid[aria-label='Next Page']",
+    ".ant-pagination-next button",
+    ".ant-pagination-next",
+    ".lzd-pagination-next",
+    ".lzd-pagination-next button",
+    "li.ant-pagination-next button",
+    "li.ant-pagination-next a",
+    ".iweb-pagination-next",
+    ".iweb-pagination-next button",
+    "li.iweb-pagination-next button",
+    ".iweb-pagination-next .iweb-pagination-item-link",
+    // Amazon
+    "li.a-last a",
+    ".a-pagination .a-last a",
+    // TikTok Shop
+    "[data-e2e='pagination-next']",
   ];
 
   for (const selector of selectorCandidates) {

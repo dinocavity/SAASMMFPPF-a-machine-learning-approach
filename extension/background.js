@@ -1,5 +1,37 @@
 console.log('Background service worker loaded');
 
+// --- Tab / URL change detection ---
+let lastCommunicatedUrl = null;
+
+function notifyTabChange(tabId, url) {
+  if (url === lastCommunicatedUrl) return;
+  lastCommunicatedUrl = url;
+
+  chrome.runtime.sendMessage(
+    { action: 'TAB_CHANGED', tabId, url },
+    () => {
+      // Sidepanel might not be open — ignore errors
+      if (chrome.runtime.lastError) { /* silent */ }
+    }
+  );
+}
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  chrome.tabs.get(activeInfo.tabId, (tab) => {
+    if (chrome.runtime.lastError || !tab) return;
+    notifyTabChange(tab.id, tab.url);
+  });
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.url && changeInfo.status !== 'complete') return;
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]?.id === tabId) {
+      notifyTabChange(tabId, tab.url);
+    }
+  });
+});
+
 const CONTENT_ACTIONS = new Set([
   "scrollToReviews",
   "startAutoAnalyze",

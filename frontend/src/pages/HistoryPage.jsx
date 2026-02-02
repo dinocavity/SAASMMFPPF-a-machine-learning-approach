@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useHistoryContext } from "@/contexts/HistoryContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,35 @@ function formatDate(iso) {
   });
 }
 
+function normalizeUrl(url) {
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`.toLowerCase();
+  } catch {
+    return url.toLowerCase();
+  }
+}
+
+function groupHistory(entries) {
+  const groups = new Map();
+  entries.forEach((entry) => {
+    const urlKey = normalizeUrl(entry.url);
+    const nameKey = entry.productName?.toLowerCase().trim() || "";
+    const key = urlKey || nameKey || entry.id;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        urlKey,
+        nameKey,
+        entries: [],
+      });
+    }
+    groups.get(key).entries.push(entry);
+  });
+  return Array.from(groups.values());
+}
+
 function getFraudBadgeVariant(verdict) {
   if (verdict === "Likely Fake") return "destructive";
   if (verdict === "Likely Authentic") return "success";
@@ -58,11 +87,13 @@ function getSentimentBadgeVariant(verdict) {
 
 export function HistoryPage() {
   const { history, clearHistory } = useHistoryContext();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [fraudFilter, setFraudFilter] = useState("all");
   const [sentimentFilter, setSentimentFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState("newest");
   const [showClearDialog, setShowClearDialog] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set());
 
   const filtered = useMemo(() => {
     let items = [...history];
@@ -94,6 +125,27 @@ export function HistoryPage() {
 
     return items;
   }, [history, search, fraudFilter, sentimentFilter, sortOrder]);
+
+  const grouped = useMemo(() => {
+    const groups = groupHistory(filtered);
+    groups.forEach((group) => {
+      group.entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+      group.latest = group.entries[0];
+    });
+    return groups;
+  }, [filtered]);
+
+  const toggleGroup = (key) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const handleClear = () => {
     clearHistory();
@@ -168,7 +220,7 @@ export function HistoryPage() {
       </div>
 
       {/* History list */}
-      {filtered.length === 0 ? (
+      {grouped.length === 0 ? (
         <div className="py-12 text-center">
           <p className="text-sm text-muted-foreground">
             No results match your filters
@@ -176,46 +228,112 @@ export function HistoryPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((entry) => (
-            <Link
-              key={entry.id}
-              to={`/results?historyId=${entry.id}`}
-              className="block"
-            >
-              <Card className="transition-colors hover:bg-muted/50">
-                <CardContent className="flex items-center gap-3 p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {entry.productName || "Unknown Product"}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {formatDate(entry.date)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    <Badge
-                      variant={getFraudBadgeVariant(entry.fraudVerdict)}
-                      className="text-[10px] px-1.5 py-0"
+          {grouped.map((group) => {
+            const entry = group.latest;
+            const isExpanded = expandedGroups.has(group.key);
+            const hasMultiple = group.entries.length > 1;
+            const detailsHref = `/results?historyId=${entry.id}`;
+            return (
+              <div key={group.key} className="space-y-2">
+                <Card className="transition-colors hover:bg-muted/50">
+                  <CardContent className="flex items-center gap-3 p-3">
+                    <button
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() =>
+                        hasMultiple
+                          ? toggleGroup(group.key)
+                          : navigate(detailsHref)
+                      }
+                      type="button"
                     >
-                      {entry.fraudVerdict === "Likely Fake"
-                        ? "Fake"
-                        : entry.fraudVerdict === "Likely Authentic"
-                          ? "Authentic"
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {entry.productName || "Unknown Product"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {formatDate(entry.date)} • {group.entries.length} run
+                          {group.entries.length > 1 ? "s" : ""}
+                        </p>
+                      </div>
+                    </button>
+                    <div className="flex shrink-0 gap-1.5">
+                      <Badge
+                        variant={getFraudBadgeVariant(entry.fraudVerdict)}
+                        className="text-[10px] px-1.5 py-0"
+                      >
+                        {entry.fraudVerdict === "Likely Fake"
+                          ? "Fake"
+                          : entry.fraudVerdict === "Likely Authentic"
+                            ? "Authentic"
+                            : "?"}
+                      </Badge>
+                      <Badge
+                        variant={getSentimentBadgeVariant(entry.sentimentVerdict)}
+                        className="text-[10px] px-1.5 py-0 capitalize"
+                      >
+                        {entry.sentimentVerdict !== "Unknown"
+                          ? entry.sentimentVerdict
                           : "?"}
-                    </Badge>
-                    <Badge
-                      variant={getSentimentBadgeVariant(entry.sentimentVerdict)}
-                      className="text-[10px] px-1.5 py-0 capitalize"
-                    >
-                      {entry.sentimentVerdict !== "Unknown"
-                        ? entry.sentimentVerdict
-                        : "?"}
-                    </Badge>
+                      </Badge>
+                      {hasMultiple && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleGroup(group.key)}
+                        >
+                          {isExpanded ? "Hide" : "Show"}
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+                {isExpanded && hasMultiple && (
+                  <div className="space-y-1 pl-4">
+                    {group.entries.map((sub) => (
+                      <Link
+                        key={sub.id}
+                        to={`/results?historyId=${sub.id}`}
+                        className="block"
+                      >
+                        <Card className="transition-colors hover:bg-muted/50">
+                          <CardContent className="flex items-center gap-3 p-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium">
+                                {sub.productName || "Unknown Product"}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {formatDate(sub.date)}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 gap-1.5">
+                              <Badge
+                                variant={getFraudBadgeVariant(sub.fraudVerdict)}
+                                className="text-[10px] px-1.5 py-0"
+                              >
+                                {sub.fraudVerdict === "Likely Fake"
+                                  ? "Fake"
+                                  : sub.fraudVerdict === "Likely Authentic"
+                                    ? "Authentic"
+                                    : "?"}
+                              </Badge>
+                              <Badge
+                                variant={getSentimentBadgeVariant(sub.sentimentVerdict)}
+                                className="text-[10px] px-1.5 py-0 capitalize"
+                              >
+                                {sub.sentimentVerdict !== "Unknown"
+                                  ? sub.sentimentVerdict
+                                  : "?"}
+                              </Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    ))}
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

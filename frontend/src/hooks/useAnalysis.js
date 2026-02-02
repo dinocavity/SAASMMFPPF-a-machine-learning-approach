@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/contexts/ToastContext";
 import { useOcr } from "./useOcr";
@@ -44,6 +44,9 @@ export function useAnalysis() {
   // Page URL state
   const [pageUrl, setPageUrl] = useState(null);
 
+  // Current tab URL & supported-page detection
+  const [currentTabUrl, setCurrentTabUrl] = useState(null);
+
   // Phase progress state
   const [phase, setPhase] = useState(PHASES.IDLE);
   const [phaseProgress, setPhaseProgress] = useState(0);
@@ -54,6 +57,121 @@ export function useAnalysis() {
   const phaseRef = useRef(PHASES.IDLE);
   const scrollTimeoutRef = useRef(null);
   const ocrUiThrottleRef = useRef({ t: 0, p: -1 });
+
+  // Supported-domain check
+  const SUPPORTED_DOMAINS = [
+    'shopee.ph', 'shopee.com',
+    'lazada.com', 'lazada.sg', 'lazada.com.ph',
+    'lazada.vn', 'lazada.co.id', 'lazada.co.th', 'lazada.com.my',
+    'amazon.com', 'amazon.com.ph', 'amazon.sg', 'amazon.co.jp',
+    'tiktok.com',
+  ];
+
+  const isSupportedDomain = useCallback((url) => {
+    if (!url) return false;
+    if (/^(chrome|edge|about|chrome-extension):/.test(url)) return false;
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      return SUPPORTED_DOMAINS.some(
+        (d) => hostname === d || hostname.endsWith('.' + d)
+      );
+    } catch { return false; }
+  }, []);
+
+  const isProductPage = useCallback((url) => {
+    if (!url || !isSupportedDomain(url)) return false;
+    try {
+      const parsed = new URL(url);
+      const hostname = parsed.hostname.toLowerCase();
+      const pathname = parsed.pathname.toLowerCase();
+
+      // Shopee product pages: contain "-i." followed by shop_id.item_id
+      if (SUPPORTED_DOMAINS.some((d) => (d.startsWith('shopee') && (hostname === d || hostname.endsWith('.' + d))))) {
+        return /-i\.\d+\.\d+/.test(pathname);
+      }
+
+      // Lazada product pages: /products/ path or -i<item_id> pattern
+      if (SUPPORTED_DOMAINS.some((d) => (d.startsWith('lazada') && (hostname === d || hostname.endsWith('.' + d))))) {
+        return /\/products\//.test(pathname) || /-i\d+/.test(pathname);
+      }
+
+      // Amazon product pages: /dp/ or /gp/product/ in pathname
+      if (SUPPORTED_DOMAINS.some((d) => (d.startsWith('amazon') && (hostname === d || hostname.endsWith('.' + d))))) {
+        return /\/dp\//.test(pathname) || /\/gp\/product\//.test(pathname);
+      }
+
+      // TikTok Shop product pages: /product/ in pathname
+      if (hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com')) {
+        return /\/product\//.test(pathname);
+      }
+
+      return false;
+    } catch { return false; }
+  }, [isSupportedDomain]);
+
+  const isSupportedUrl = useCallback((url) => {
+    return isSupportedDomain(url);
+  }, [isSupportedDomain]);
+
+  const getPlatformFromUrl = useCallback((url) => {
+    if (!url) return null;
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      if (SUPPORTED_DOMAINS.some((d) => d.startsWith('shopee') && (hostname === d || hostname.endsWith('.' + d)))) return 'shopee';
+      if (SUPPORTED_DOMAINS.some((d) => d.startsWith('lazada') && (hostname === d || hostname.endsWith('.' + d)))) return 'lazada';
+      if (SUPPORTED_DOMAINS.some((d) => d.startsWith('amazon') && (hostname === d || hostname.endsWith('.' + d)))) return 'amazon';
+      if (hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com')) return 'tiktok';
+      return null;
+    } catch { return null; }
+  }, []);
+
+  const currentPlatform = useMemo(
+    () => getPlatformFromUrl(currentTabUrl),
+    [currentTabUrl, getPlatformFromUrl]
+  );
+
+  const reset = useCallback(() => {
+    setResults(null);
+    setLoading(false);
+    setError("");
+    setResultsSaved(false);
+    setAutoFlowActive(false);
+    setAutoFlowStatus("");
+    setAutoFlowProgress(0);
+    setAutoFlowTotal(0);
+    setElapsed(0);
+    setDetectedPages(null);
+    setSelectedPages(1);
+    setCaptureMetadata(null);
+    setPagePaused(false);
+    setCapturedPageCount(0);
+    setCapturedScreenshotCount(0);
+    setPageScreenshotCounts([]);
+    setPagesCaptured(0);
+    setPausedOcrText("");
+    setPausedOcrRemainingScreenshots([]);
+    setPausedOcrTotalScreenshots(0);
+    setPausedOcrCompletedScreenshots(0);
+    ocrTerminatedRef.current = false;
+    ocrPauseRequestedRef.current = false;
+    setProductName(null);
+    productNameRef.current = null;
+    setPageUrl(null);
+    setPhase(PHASES.IDLE);
+    setPhaseProgress(0);
+    setPhaseDetail("");
+    cancelRef.current = false;
+    ocr.reset();
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = null;
+    }
+  }, [ocr]);
+
+  const isSupportedPage = useMemo(
+    () => currentTabUrl === null ? true : isProductPage(currentTabUrl),
+    [currentTabUrl, isProductPage]
+  );
 
   // Timer for elapsed time
   useEffect(() => {
@@ -235,6 +353,36 @@ export function useAnalysis() {
 
     chrome.runtime.onMessage.addListener(handler);
     return () => chrome.runtime.onMessage.removeListener(handler);
+  }, []);
+
+  // Tab-change detection — silently reset when idle
+  useEffect(() => {
+    if (!chrome?.runtime?.onMessage) return;
+
+    const handler = (message) => {
+      if (message.action !== ACTION_TYPES.TAB_CHANGED) return;
+
+      setCurrentTabUrl(message.url);
+
+      // Only reset when NOT actively working
+      const isIdle =
+        !autoFlowActiveRef.current && !ocr.loading && !pagePaused;
+      if (isIdle) {
+        reset();
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handler);
+    return () => chrome.runtime.onMessage.removeListener(handler);
+  }, [ocr.loading, pagePaused, reset]);
+
+  // Initialize current tab URL on mount
+  useEffect(() => {
+    if (!chrome?.tabs?.query) return;
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (chrome.runtime.lastError || !tabs[0]) return;
+      setCurrentTabUrl(tabs[0].url);
+    });
   }, []);
 
   const fetchProductName = useCallback(() => {
@@ -640,44 +788,6 @@ export function useAnalysis() {
     });
   }, [ocr]);
 
-  const reset = useCallback(() => {
-    setResults(null);
-    setLoading(false);
-    setError("");
-    setResultsSaved(false);
-    setAutoFlowActive(false);
-    setAutoFlowStatus("");
-    setAutoFlowProgress(0);
-    setAutoFlowTotal(0);
-    setElapsed(0);
-    setDetectedPages(null);
-    setSelectedPages(1);
-    setCaptureMetadata(null);
-    setPagePaused(false);
-    setCapturedPageCount(0);
-    setCapturedScreenshotCount(0);
-    setPageScreenshotCounts([]);
-    setPagesCaptured(0);
-    setPausedOcrText("");
-    setPausedOcrRemainingScreenshots([]);
-    setPausedOcrTotalScreenshots(0);
-    setPausedOcrCompletedScreenshots(0);
-    ocrTerminatedRef.current = false;
-    ocrPauseRequestedRef.current = false;
-    setProductName(null);
-    productNameRef.current = null;
-    setPageUrl(null);
-    setPhase(PHASES.IDLE);
-    setPhaseProgress(0);
-    setPhaseDetail("");
-    cancelRef.current = false;
-    ocr.reset();
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-      scrollTimeoutRef.current = null;
-    }
-  }, [ocr]);
-
   // Calculate overall progress percentage
   const progressPercent = ocr.loading
     ? ocr.progress
@@ -704,6 +814,10 @@ export function useAnalysis() {
     captureMetadata,
     productName,
     pageUrl,
+    currentTabUrl,
+    currentPlatform,
+    isSupportedPage,
+    isOnSupportedDomain: currentTabUrl === null ? true : isSupportedDomain(currentTabUrl),
     phase,
     phaseProgress,
     phaseDetail,
@@ -733,5 +847,7 @@ export function useAnalysis() {
     setPausedOcrText,
     pausedOcrRemainingScreenshots,
     setPausedOcrRemainingScreenshots,
+    pausedOcrTotalScreenshots,
+    pausedOcrCompletedScreenshots,
   };
 }

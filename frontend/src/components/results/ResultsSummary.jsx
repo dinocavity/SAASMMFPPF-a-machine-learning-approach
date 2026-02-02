@@ -3,206 +3,144 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfidenceBar } from "./ConfidenceBar";
-import { SIGNAL_EXPLANATIONS } from "@/lib/constants";
+import { FraudModelRow, SentimentModelRow } from "./ModelRow";
 
 const ArrowRightIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="5" y1="12" x2="19" y2="12" />
     <polyline points="12 5 19 12 12 19" />
   </svg>
 );
 
-const SignalIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
+/* ── consensus header (compact) ─────────────────────── */
 
-function FraudVerdictCard({ fraud }) {
-  if (!fraud) return null;
-
-  const confidence = fraud.average_confidence;
-  const consensus = fraud.consensus_is_fake;
-  const modelsOk = fraud.models_ok ?? 0;
-  const allFailed = modelsOk === 0;
-
-  // Collect all signals from successful models
-  const signals = [];
-  if (fraud.models) {
-    Object.values(fraud.models).forEach((m) => {
-      if (m?.status === "ok" && m.signals?.length) {
-        m.signals.forEach((s) => {
-          if (!signals.includes(s)) signals.push(s);
-        });
-      }
-    });
-  }
-
-  const getBadgeVariant = () => {
-    if (allFailed) return "secondary";
-    return consensus ? "destructive" : "success";
-  };
-
-  const getBadgeLabel = () => {
-    if (allFailed) return "No models available";
-    return consensus ? "Likely Fake" : "Likely Authentic";
-  };
-
-  const borderColor = allFailed
-    ? "border-slate-300 dark:border-slate-700"
-    : consensus
-      ? "border-red-300 dark:border-red-800"
-      : "border-emerald-300 dark:border-emerald-800";
-
-  const bgColor = allFailed
-    ? ""
-    : consensus
-      ? "bg-red-50/50 dark:bg-red-950/20"
-      : "bg-emerald-50/50 dark:bg-emerald-950/20";
-
+function ConsensusHeader({ label, badge, badgeVariant, confidence, modelsOk, modelsTotal }) {
   return (
-    <Card className={`border-2 ${borderColor} ${bgColor}`}>
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Fraud Detection
-          </p>
-          <span className="text-[10px] text-muted-foreground">
-            {modelsOk}/{fraud.models_total ?? 3} models
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Badge variant={getBadgeVariant()} className="text-sm px-3 py-1">
-            {getBadgeLabel()}
-          </Badge>
-        </div>
-
+    <div className="flex items-center justify-between gap-3 mb-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground shrink-0">{label}</p>
+        <Badge variant={badgeVariant} className="text-[10px] px-2 py-0.5 shrink-0">{badge}</Badge>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
         {confidence != null && (
-          <ConfidenceBar value={confidence} label="Average Confidence" />
+          <span className="text-xs tabular-nums font-medium">{Math.round(confidence * 100)}%</span>
         )}
-
-        {signals.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              Detected Signals
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {signals.slice(0, 5).map((signal) => (
-                <span
-                  key={signal}
-                  className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-                  title={SIGNAL_EXPLANATIONS[signal] || signal}
-                >
-                  <SignalIcon />
-                  {signal.replace(/-/g, " ")}
-                </span>
-              ))}
-              {signals.length > 5 && (
-                <span className="text-[10px] text-muted-foreground">
-                  +{signals.length - 5} more
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        <span className="text-[10px] text-muted-foreground">{modelsOk}/{modelsTotal} models</span>
+      </div>
+    </div>
   );
 }
 
-function SentimentVerdictCard({ sentiment }) {
-  if (!sentiment) return null;
-
-  const confidence = sentiment.average_confidence;
-  const consensus = sentiment.consensus_sentiment;
-  const modelsOk = sentiment.models_ok ?? 0;
-  const allFailed = modelsOk === 0;
-
-  const getBadgeVariant = () => {
-    if (allFailed) return "secondary";
-    if (consensus === "positive") return "success";
-    if (consensus === "negative") return "destructive";
-    return "secondary";
-  };
-
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Sentiment Analysis
-          </p>
-          <span className="text-[10px] text-muted-foreground">
-            {modelsOk}/{sentiment.models_total ?? 3} models
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge variant={getBadgeVariant()} className="capitalize">
-            {allFailed ? "No models available" : consensus || "N/A"}
-          </Badge>
-          {confidence != null && (
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {Math.round(confidence * 100)}% confidence
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+/* ── capture stats bar ──────────────────────────────── */
 
 function CaptureStats({ captureMetadata, textMetadata }) {
   const stats = [];
-
-  if (captureMetadata?.totalPages != null) {
-    stats.push(`${captureMetadata.totalPages} page${captureMetadata.totalPages !== 1 ? "s" : ""}`);
-  }
-  if (captureMetadata?.totalScreenshots != null) {
-    stats.push(`${captureMetadata.totalScreenshots} screenshots`);
-  }
+  if (captureMetadata?.totalPages != null) stats.push(`${captureMetadata.totalPages} page${captureMetadata.totalPages !== 1 ? "s" : ""}`);
+  if (captureMetadata?.totalScreenshots != null) stats.push(`${captureMetadata.totalScreenshots} screenshots`);
   const wordCount = textMetadata?.word_count ?? captureMetadata?.ocrWordCount;
-  if (wordCount != null) {
-    stats.push(`${wordCount.toLocaleString()} words`);
-  }
-
+  if (wordCount != null) stats.push(`${wordCount.toLocaleString()} words`);
+  const sentenceCount = textMetadata?.sentence_count;
+  if (sentenceCount != null) stats.push(`${sentenceCount} sentences`);
   if (!stats.length) return null;
 
   return (
-    <p className="text-center text-xs text-muted-foreground">
-      {stats.join(" \u00b7 ")}
-    </p>
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+      {stats.map((s, i) => (
+        <span key={i} className="flex items-center gap-1">
+          {i > 0 && <span className="text-border">·</span>}
+          {s}
+        </span>
+      ))}
+    </div>
   );
 }
+
+/* ── main component ─────────────────────────────────── */
 
 export function ResultsSummary({ results, captureMetadata, productName, historyId }) {
   if (!results) return null;
 
   const { fraud, sentiment, text_metadata } = results;
 
+  const fraudConfidence = fraud?.average_confidence;
+  const fraudConsensus = fraud?.consensus_is_fake;
+  const fraudModelsOk = fraud?.models_ok ?? 0;
+  const fraudModelsTotal = fraud?.models_total ?? 3;
+  const fraudAllFailed = fraudModelsOk === 0;
+
+  const sentConfidence = sentiment?.average_confidence;
+  const sentConsensus = sentiment?.consensus_sentiment;
+  const sentModelsOk = sentiment?.models_ok ?? 0;
+  const sentModelsTotal = sentiment?.models_total ?? 3;
+  const sentAllFailed = sentModelsOk === 0;
+
+  const fraudBadgeVariant = fraudAllFailed ? "secondary" : fraudConsensus ? "destructive" : "success";
+  const fraudBadgeLabel = fraudAllFailed ? "N/A" : fraudConsensus ? "Likely Fake" : "Authentic";
+
+  const sentBadgeVariant = sentAllFailed ? "secondary" : sentConsensus === "positive" ? "success" : sentConsensus === "negative" ? "destructive" : "secondary";
+  const sentBadgeLabel = sentAllFailed ? "N/A" : sentConsensus || "N/A";
+
   return (
-    <div className="space-y-3" role="region" aria-label="Analysis summary">
-      {productName && (
-        <div className="text-center">
-          <p className="text-sm font-semibold leading-tight line-clamp-2">
-            {productName}
-          </p>
+    <div className="space-y-4" role="region" aria-label="Analysis results dashboard">
+      {/* product name + stats */}
+      {(productName || captureMetadata || text_metadata) && (
+        <div className="space-y-1 text-center">
+          {productName && <p className="text-sm font-semibold leading-tight line-clamp-2">{productName}</p>}
+          <CaptureStats captureMetadata={captureMetadata} textMetadata={text_metadata} />
         </div>
       )}
 
-      <FraudVerdictCard fraud={fraud} />
-      <SentimentVerdictCard sentiment={sentiment} />
+      {/* ── two-column grid: fraud | sentiment ── */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* ── fraud column ── */}
+        <Card className={`border-2 ${fraudAllFailed ? "border-slate-300 dark:border-slate-700" : fraudConsensus ? "border-red-200 dark:border-red-900" : "border-emerald-200 dark:border-emerald-900"}`}>
+          <CardContent className="p-4 space-y-3">
+            <ConsensusHeader
+              label="Fraud Detection"
+              badge={fraudBadgeLabel}
+              badgeVariant={fraudBadgeVariant}
+              confidence={fraudConfidence}
+              modelsOk={fraudModelsOk}
+              modelsTotal={fraudModelsTotal}
+            />
+            {fraudConfidence != null && <ConfidenceBar value={fraudConfidence} label="Avg. Confidence" />}
 
-      <CaptureStats
-        captureMetadata={captureMetadata}
-        textMetadata={text_metadata}
-      />
+            {/* model rows */}
+            <div className="space-y-2 pt-1">
+              <FraudModelRow model={fraud?.models?.api} modelKey="api" modelName="HuggingFace API" />
+              <FraudModelRow model={fraud?.models?.local_1} modelKey="local_1" modelName="RoBERTa" />
+              <FraudModelRow model={fraud?.models?.local_2} modelKey="local_2" modelName="Random Forest" />
+            </div>
+          </CardContent>
+        </Card>
 
-      <Button asChild variant="outline" className="w-full gap-2">
+        {/* ── sentiment column ── */}
+        <Card className="border-2 border-slate-200 dark:border-slate-800">
+          <CardContent className="p-4 space-y-3">
+            <ConsensusHeader
+              label="Sentiment"
+              badge={sentBadgeLabel}
+              badgeVariant={sentBadgeVariant}
+              confidence={sentConfidence}
+              modelsOk={sentModelsOk}
+              modelsTotal={sentModelsTotal}
+            />
+            {sentConfidence != null && <ConfidenceBar value={sentConfidence} label="Avg. Confidence" />}
+
+            {/* model rows */}
+            <div className="space-y-2 pt-1">
+              <SentimentModelRow model={sentiment?.models?.api} modelKey="api" modelName="HuggingFace API" />
+              <SentimentModelRow model={sentiment?.models?.local_1} modelKey="local_1" modelName="RoBERTa" />
+              <SentimentModelRow model={sentiment?.models?.local_2} modelKey="local_2" modelName="SVM" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── link to full details page ── */}
+      <Button asChild variant="outline" size="sm" className="w-full gap-2">
         <Link to={historyId ? `/results/details?historyId=${historyId}` : "/results/details"}>
-          View Detailed Breakdown
+          Full Data Overview & Breakdown
           <ArrowRightIcon />
         </Link>
       </Button>

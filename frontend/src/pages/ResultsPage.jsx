@@ -3,7 +3,6 @@ import { useAnalysisContext } from "@/contexts/AnalysisContext";
 import { useHistoryContext } from "@/contexts/HistoryContext";
 import { ResultsSummary } from "@/components/results/ResultsSummary";
 import { Button } from "@/components/ui/button";
-import { SkeletonCard } from "@/components/ui/skeleton";
 
 const ArrowLeftIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -28,6 +27,24 @@ const InfoIcon = () => (
   </svg>
 );
 
+const FullscreenLoader = () => (
+  <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95">
+    <svg
+      className="h-10 w-10 animate-spin text-primary"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+    </svg>
+    <div className="text-center">
+      <p className="text-sm font-medium">Preparing analysis results...</p>
+      <p className="text-xs text-muted-foreground">This usually takes a few seconds.</p>
+    </div>
+  </div>
+);
+
 export function ResultsPage() {
   const { results: liveResults, loading, reset, captureMetadata: liveMeta, productName: liveName } = useAnalysisContext();
   const { getEntryById } = useHistoryContext();
@@ -42,13 +59,7 @@ export function ResultsPage() {
   const productName = isHistoryView ? historyEntry.productName : liveName;
 
   if (!isHistoryView && loading) {
-    return (
-      <div className="space-y-3" aria-busy="true" aria-label="Loading results">
-        <SkeletonCard />
-        <SkeletonCard />
-        <SkeletonCard />
-      </div>
-    );
+    return <FullscreenLoader />;
   }
 
   if (!results) {
@@ -75,12 +86,17 @@ export function ResultsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="font-heading text-xl font-semibold">Analysis Results</h2>
-          <span
-            className="inline-flex h-7 w-7 items-center justify-center rounded-full border text-muted-foreground transition-colors hover:text-foreground"
-            title="How it works: We capture review text via OCR, run 6 ML models plus heuristic checks, then combine their confidence into a final consensus."
-            aria-label="How the model works"
-          >
-            <InfoIcon />
+          <span className="group relative inline-flex">
+            <span
+              className="inline-flex h-7 w-7 cursor-help items-center justify-center rounded-full border text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+              aria-label="How the analysis works"
+            >
+              <InfoIcon />
+            </span>
+            <span className="pointer-events-none absolute top-full left-0 z-50 mt-2 w-72 rounded-lg border bg-popover p-3 text-xs leading-relaxed text-popover-foreground opacity-0 shadow-lg transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+              <span className="font-semibold">How it works</span><br />
+              We capture review text via OCR, then run 6 ML models (3 fraud + 3 sentiment) combined with heuristic checks. Each model's confidence is averaged into a consensus verdict. Hover the <span className="font-mono text-[10px]">i</span> icon on each model for specifics.
+            </span>
           </span>
         </div>
         {isHistoryView ? (

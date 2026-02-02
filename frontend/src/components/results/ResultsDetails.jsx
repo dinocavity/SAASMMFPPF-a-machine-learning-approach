@@ -1,8 +1,6 @@
-import { SentimentCard } from "./SentimentCard";
-import { AuthenticityCard } from "./AuthenticityCard";
+import { FraudModelRow, SentimentModelRow } from "./ModelRow";
 import { AverageCard } from "./AverageCard";
 import { DataOverview } from "./DataOverview";
-import { ModelDetails } from "./ModelDetails";
 
 function SectionHeading({ children }) {
   return (
@@ -32,75 +30,38 @@ export function ResultsDetails({ results, captureMetadata }) {
         textMetadata={text_metadata}
       />
 
-      {/* Fraud Detection Section */}
-      <div className="space-y-4">
-        <SectionHeading>Fraud Detection</SectionHeading>
-        <AverageCard
-          title="Fraud Detection Average"
-          description="Consensus across 3 models"
-          result={fraud}
-          type="fraud"
-        />
+      {/* Two-column grid for fraud + sentiment */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* ── Fraud Detection ── */}
         <div className="space-y-4">
-          <AuthenticityCard
-            authenticity={fraud?.models?.api}
-            modelName="HuggingFace API"
+          <SectionHeading>Fraud Detection</SectionHeading>
+          <AverageCard
+            title="Fraud Detection Consensus"
+            description="Averaged across 3 models"
+            result={fraud}
+            type="fraud"
           />
-          <AuthenticityCard
-            authenticity={fraud?.models?.local_1}
-            modelName="RoBERTa"
-          />
-          <AuthenticityCard
-            authenticity={fraud?.models?.local_2}
-            modelName="Random Forest"
-          />
+          <div className="space-y-2">
+            <FraudModelRow model={fraud?.models?.api} modelKey="api" modelName="HuggingFace API" />
+            <FraudModelRow model={fraud?.models?.local_1} modelKey="local_1" modelName="RoBERTa" />
+            <FraudModelRow model={fraud?.models?.local_2} modelKey="local_2" modelName="Random Forest" />
+          </div>
         </div>
-        <div className="space-y-2">
-          <ModelDetails model={fraud?.models?.api} type="fraud" />
-          <ModelDetails model={fraud?.models?.local_1} type="fraud" />
-          <ModelDetails model={fraud?.models?.local_2} type="fraud" />
-        </div>
-      </div>
 
-      {/* Sentiment Analysis Section */}
-      <div className="space-y-4">
-        <SectionHeading>Sentiment Analysis</SectionHeading>
-        <AverageCard
-          title="Sentiment Analysis Average"
-          description="Consensus across 3 models"
-          result={sentiment}
-          type="sentiment"
-        />
+        {/* ── Sentiment Analysis ── */}
         <div className="space-y-4">
-          <SentimentCard
-            title="HuggingFace API"
-            description="Hosted transformer model"
-            sentiment={sentiment?.models?.api?.sentiment}
-            confidence={sentiment?.models?.api?.confidence}
-            status={sentiment?.models?.api?.status}
-            error={sentiment?.models?.api?.error}
+          <SectionHeading>Sentiment Analysis</SectionHeading>
+          <AverageCard
+            title="Sentiment Consensus"
+            description="Averaged across 3 models"
+            result={sentiment}
+            type="sentiment"
           />
-          <SentimentCard
-            title="RoBERTa"
-            description="Local RoBERTa transformer"
-            sentiment={sentiment?.models?.local_1?.sentiment}
-            confidence={sentiment?.models?.local_1?.confidence}
-            status={sentiment?.models?.local_1?.status}
-            error={sentiment?.models?.local_1?.error}
-          />
-          <SentimentCard
-            title="SVM"
-            description="Local SVM model"
-            sentiment={sentiment?.models?.local_2?.sentiment}
-            confidence={sentiment?.models?.local_2?.confidence}
-            status={sentiment?.models?.local_2?.status}
-            error={sentiment?.models?.local_2?.error}
-          />
-        </div>
-        <div className="space-y-2">
-          <ModelDetails model={sentiment?.models?.api} type="sentiment" />
-          <ModelDetails model={sentiment?.models?.local_1} type="sentiment" />
-          <ModelDetails model={sentiment?.models?.local_2} type="sentiment" />
+          <div className="space-y-2">
+            <SentimentModelRow model={sentiment?.models?.api} modelKey="api" modelName="HuggingFace API" />
+            <SentimentModelRow model={sentiment?.models?.local_1} modelKey="local_1" modelName="RoBERTa" />
+            <SentimentModelRow model={sentiment?.models?.local_2} modelKey="local_2" modelName="SVM" />
+          </div>
         </div>
       </div>
     </div>
