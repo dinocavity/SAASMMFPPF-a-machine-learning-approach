@@ -33,6 +33,12 @@ const TrashIcon = () => (
   </svg>
 );
 
+const ChevronIcon = ({ className = "" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
 function formatDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, {
@@ -234,105 +240,140 @@ export function HistoryPage() {
             const hasMultiple = group.entries.length > 1;
             const detailsHref = `/results?historyId=${entry.id}`;
             return (
-              <div key={group.key} className="space-y-2">
-                <Card className="transition-colors hover:bg-muted/50">
-                  <CardContent className="flex items-center gap-3 p-3">
-                    <button
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                      onClick={() =>
-                        hasMultiple
-                          ? toggleGroup(group.key)
-                          : navigate(detailsHref)
-                      }
-                      type="button"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {entry.productName || "Unknown Product"}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {formatDate(entry.date)} • {group.entries.length} run
-                          {group.entries.length > 1 ? "s" : ""}
-                        </p>
-                      </div>
-                    </button>
-                    <div className="flex shrink-0 gap-1.5">
-                      <Badge
-                        variant={getFraudBadgeVariant(entry.fraudVerdict)}
-                        className="text-[10px] px-1.5 py-0"
-                      >
-                        {entry.fraudVerdict === "Likely Fake"
-                          ? "Fake"
-                          : entry.fraudVerdict === "Likely Authentic"
-                            ? "Authentic"
-                            : "?"}
-                      </Badge>
-                      <Badge
-                        variant={getSentimentBadgeVariant(entry.sentimentVerdict)}
-                        className="text-[10px] px-1.5 py-0 capitalize"
-                      >
-                        {entry.sentimentVerdict !== "Unknown"
-                          ? entry.sentimentVerdict
-                          : "?"}
-                      </Badge>
-                      {hasMultiple && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleGroup(group.key)}
-                        >
-                          {isExpanded ? "Hide" : "Show"}
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-                {isExpanded && hasMultiple && (
-                  <div className="space-y-1 pl-4">
-                    {group.entries.map((sub) => (
-                      <Link
-                        key={sub.id}
-                        to={`/results?historyId=${sub.id}`}
-                        className="block"
+                <div key={group.key} className="space-y-2">
+                  {hasMultiple ? (
+                    <details open={isExpanded} className="group">
+                      <summary
+                        className="list-none cursor-pointer"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          toggleGroup(group.key);
+                        }}
+                        aria-expanded={isExpanded}
                       >
                         <Card className="transition-colors hover:bg-muted/50">
-                          <CardContent className="flex items-center gap-3 p-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-medium">
-                                {sub.productName || "Unknown Product"}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {formatDate(sub.date)}
-                              </p>
+                          <CardContent className="flex items-center gap-3 p-3">
+                            <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium">
+                                  {entry.productName || "Unknown Product"}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {formatDate(entry.date)}  -  {group.entries.length} run
+                                  {group.entries.length > 1 ? "s" : ""}
+                                </p>
+                              </div>
                             </div>
-                            <div className="flex shrink-0 gap-1.5">
+                            <div className="flex shrink-0 items-center gap-1.5">
                               <Badge
-                                variant={getFraudBadgeVariant(sub.fraudVerdict)}
+                                variant={getFraudBadgeVariant(entry.fraudVerdict)}
                                 className="text-[10px] px-1.5 py-0"
                               >
-                                {sub.fraudVerdict === "Likely Fake"
+                                {entry.fraudVerdict === "Likely Fake"
                                   ? "Fake"
-                                  : sub.fraudVerdict === "Likely Authentic"
+                                  : entry.fraudVerdict === "Likely Authentic"
                                     ? "Authentic"
                                     : "?"}
                               </Badge>
                               <Badge
-                                variant={getSentimentBadgeVariant(sub.sentimentVerdict)}
+                                variant={getSentimentBadgeVariant(entry.sentimentVerdict)}
                                 className="text-[10px] px-1.5 py-0 capitalize"
                               >
-                                {sub.sentimentVerdict !== "Unknown"
-                                  ? sub.sentimentVerdict
+                                {entry.sentimentVerdict !== "Unknown"
+                                  ? entry.sentimentVerdict
                                   : "?"}
                               </Badge>
+                              <ChevronIcon className={`text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                             </div>
                           </CardContent>
                         </Card>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
+                      </summary>
+                      <div className="space-y-1 pl-4">
+                        {group.entries.map((sub) => (
+                          <Link
+                            key={sub.id}
+                            to={`/results?historyId=${sub.id}`}
+                            className="block"
+                          >
+                            <Card className="transition-colors hover:bg-muted/50">
+                              <CardContent className="flex items-center gap-3 p-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-xs font-medium">
+                                    {sub.productName || "Unknown Product"}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {formatDate(sub.date)}
+                                  </p>
+                                </div>
+                                <div className="flex shrink-0 gap-1.5">
+                                  <Badge
+                                    variant={getFraudBadgeVariant(sub.fraudVerdict)}
+                                    className="text-[10px] px-1.5 py-0"
+                                  >
+                                    {sub.fraudVerdict === "Likely Fake"
+                                      ? "Fake"
+                                      : sub.fraudVerdict === "Likely Authentic"
+                                        ? "Authentic"
+                                        : "?"}
+                                  </Badge>
+                                  <Badge
+                                    variant={getSentimentBadgeVariant(sub.sentimentVerdict)}
+                                    className="text-[10px] px-1.5 py-0 capitalize"
+                                  >
+                                    {sub.sentimentVerdict !== "Unknown"
+                                      ? sub.sentimentVerdict
+                                      : "?"}
+                                  </Badge>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </Link>
+                        ))}
+                      </div>
+                    </details>
+                  ) : (
+                    <Card className="transition-colors hover:bg-muted/50">
+                      <CardContent className="flex items-center gap-3 p-3">
+                        <button
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          onClick={() => navigate(detailsHref)}
+                          type="button"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {entry.productName || "Unknown Product"}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {formatDate(entry.date)}  -  {group.entries.length} run
+                              {group.entries.length > 1 ? "s" : ""}
+                            </p>
+                          </div>
+                        </button>
+                        <div className="flex shrink-0 gap-1.5">
+                          <Badge
+                            variant={getFraudBadgeVariant(entry.fraudVerdict)}
+                            className="text-[10px] px-1.5 py-0"
+                          >
+                            {entry.fraudVerdict === "Likely Fake"
+                              ? "Fake"
+                              : entry.fraudVerdict === "Likely Authentic"
+                                ? "Authentic"
+                                : "?"}
+                          </Badge>
+                          <Badge
+                            variant={getSentimentBadgeVariant(entry.sentimentVerdict)}
+                            className="text-[10px] px-1.5 py-0 capitalize"
+                          >
+                            {entry.sentimentVerdict !== "Unknown"
+                              ? entry.sentimentVerdict
+                              : "?"}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              );
           })}
         </div>
       )}
