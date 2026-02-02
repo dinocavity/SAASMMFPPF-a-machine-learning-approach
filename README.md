@@ -1,8 +1,9 @@
 # SAASMMFPPF-a-machine-learning-approach
 
 SENTIMENT ANALYSIS AND SOCIAL MEDIA MONITORING FOR PREVENTING PURCHASE FRAUD: A MACHINE LEARNING APPROACH.
-This project analyzes public review text with sentiment and authenticity models,
-then combines OCR and structured signals to flag purchase-fraud risk.
+This extension captures on-page product reviews, extracts text locally with OCR,
+and runs multiple fraud and sentiment models to surface a clear, explainable
+verdict for shoppers and analysts.
 
 ## Environment
 Copy `.env.example` to `.env` and adjust values for your setup. For local runs,
