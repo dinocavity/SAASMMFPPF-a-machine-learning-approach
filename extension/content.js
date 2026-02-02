@@ -234,6 +234,18 @@ function detectTotalPages() {
     if (maxPage === -1) return -1;
   }
 
+  // TikTok-style pagination: "Next" div with numeric siblings
+  const tiktokNext = Array.from(document.querySelectorAll("div.cursor-pointer"))
+    .find((el) => el.textContent.trim() === "Next");
+  if (tiktokNext?.parentElement) {
+    const tiktokItems = Array.from(
+      tiktokNext.parentElement.querySelectorAll("div.cursor-pointer")
+    );
+    const maxPage = extractMaxPage(tiktokItems);
+    if (maxPage > 0) return maxPage;
+    if (maxPage === -1) return -1;
+  }
+
   // Last resort: if a Next button exists, pages are unknown
   if (hasNextButton()) {
     return -1;

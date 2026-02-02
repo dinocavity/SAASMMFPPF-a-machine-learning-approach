@@ -46,7 +46,7 @@ const FullscreenLoader = () => (
 );
 
 export function ResultsPage() {
-  const { results: liveResults, loading, reset, captureMetadata: liveMeta, productName: liveName } = useAnalysisContext();
+  const { results: liveResults, loading, reset, captureMetadata: liveMeta, productName: liveName, analysisSource } = useAnalysisContext();
   const { getEntryById } = useHistoryContext();
   const [searchParams] = useSearchParams();
 
@@ -56,7 +56,9 @@ export function ResultsPage() {
   const isHistoryView = !!historyEntry;
   const results = isHistoryView ? historyEntry.results : liveResults;
   const captureMetadata = isHistoryView ? historyEntry.captureMetadata : liveMeta;
-  const productName = isHistoryView ? historyEntry.productName : liveName;
+  const productName = isHistoryView
+    ? historyEntry.productName
+    : (analysisSource?.productName || liveName);
 
   if (!isHistoryView && loading) {
     return <FullscreenLoader />;

@@ -44,6 +44,8 @@ export function useAnalysis() {
   // Page URL state
   const [pageUrl, setPageUrl] = useState(null);
   const [analysisSource, setAnalysisSource] = useState({ url: null, productName: null });
+  const analysisSourceRef = useRef({ url: null, productName: null });
+  const startUrlRef = useRef(null);
 
   // Current tab URL & supported-page detection
   const [currentTabUrl, setCurrentTabUrl] = useState(null);
@@ -159,6 +161,7 @@ export function useAnalysis() {
     productNameRef.current = null;
     setPageUrl(null);
     setAnalysisSource({ url: null, productName: null });
+    analysisSourceRef.current = { url: null, productName: null };
     setPhase(PHASES.IDLE);
     setPhaseProgress(0);
     setPhaseDetail("");
@@ -387,7 +390,8 @@ export function useAnalysis() {
     });
   }, []);
 
-  const fetchProductName = useCallback(() => {
+  const fetchProductName = useCallback((options = {}) => {
+    const { expectedUrl = null, lockForAnalysis = false } = options;
     return new Promise((resolve) => {
       if (!chrome?.runtime?.sendMessage) {
         resolve({ productName: null, pageUrl: null });
@@ -399,12 +403,39 @@ export function useAnalysis() {
         (response) => {
           const name = response?.productName || null;
           const url = response?.pageUrl || null;
-          setProductName(name);
-          productNameRef.current = name;
-          setPageUrl(url);
+          const shouldAccept = !lockForAnalysis || (expectedUrl && url === expectedUrl);
+          if (shouldAccept) {
+            setProductName(name);
+            productNameRef.current = name;
+            setPageUrl(url);
+            if (lockForAnalysis) {
+              const nextSource = {
+                url: url ?? analysisSourceRef.current.url,
+                productName: name ?? analysisSourceRef.current.productName,
+              };
+              analysisSourceRef.current = nextSource;
+              setAnalysisSource(nextSource);
+            }
+          }
           resolve({ productName: name, pageUrl: url });
         }
       );
+    });
+  }, []);
+
+  const getActiveTabUrl = useCallback(() => {
+    return new Promise((resolve) => {
+      if (!chrome?.tabs?.query) {
+        resolve(null);
+        return;
+      }
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime.lastError || !tabs[0]) {
+          resolve(null);
+          return;
+        }
+        resolve(tabs[0].url || null);
+      });
     });
   }, []);
 
@@ -604,11 +635,23 @@ export function useAnalysis() {
       }, 30000);
 
       // Capture source URL/name snapshot before starting capture
-      const source = await fetchProductName();
-      setAnalysisSource({
-        url: source?.pageUrl ?? pageUrl,
-        productName: source?.productName ?? productName,
-      });
+      const activeUrl = await getActiveTabUrl();
+      const startUrl = activeUrl ?? currentTabUrl ?? pageUrl;
+      const startName = productNameRef.current ?? productName;
+      const initialSource = { url: startUrl, productName: startName };
+      analysisSourceRef.current = initialSource;
+      setAnalysisSource(initialSource);
+      startUrlRef.current = startUrl;
+      if (startName) {
+        productNameRef.current = startName;
+      }
+
+      // Fetch product name before starting capture (lock to starting tab)
+      if (startUrl) {
+        await fetchProductName({ expectedUrl: startUrl, lockForAnalysis: true });
+      } else {
+        await fetchProductName();
+      }
 
       const pagination =
         pages > 1 || pages === Infinity
@@ -636,7 +679,7 @@ export function useAnalysis() {
         }
       );
     },
-    [toast, selectedPages, fetchProductName, pageUrl, productName]
+    [toast, selectedPages, fetchProductName, pageUrl, productName, currentTabUrl, getActiveTabUrl]
   );
 
   const continueCapture = useCallback(() => {
