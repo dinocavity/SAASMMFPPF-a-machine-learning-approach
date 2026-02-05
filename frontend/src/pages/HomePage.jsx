@@ -13,53 +13,24 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  ShieldCheckIcon,
+  CameraIcon,
+  StopIcon,
+  SpinnerIcon,
+  ShopeeIcon,
+  LazadaIcon,
+  AmazonIcon,
+  TikTokIcon,
+} from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 const isExtension =
   typeof chrome !== "undefined" && !!chrome?.runtime?.id;
 
-const ShieldIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <path d="m9 12 2 2 4-4" />
-  </svg>
-);
-
-const CameraIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-    <circle cx="12" cy="13" r="4" />
-  </svg>
-);
-
-const StopIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-  </svg>
-);
-
 const FullscreenLoader = () => (
-  <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95">
-    <svg
-      className="h-10 w-10 animate-spin text-primary"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
+  <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95" role="status" aria-label="Loading results">
+    <SpinnerIcon size={40} className="text-primary" />
     <div className="text-center">
       <p className="text-sm font-medium">Preparing analysis results...</p>
       <p className="text-xs text-muted-foreground">This usually takes a few seconds.</p>
@@ -74,13 +45,7 @@ const PLATFORMS = [
     color: "text-orange-600 dark:text-orange-400",
     bgColor: "bg-orange-500/10",
     borderActive: "border-orange-500",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
-        <path d="M3 6h18" />
-        <path d="M16 10a4 4 0 0 1-8 0" />
-      </svg>
-    ),
+    icon: <ShopeeIcon />,
   },
   {
     id: "lazada",
@@ -88,13 +53,7 @@ const PLATFORMS = [
     color: "text-blue-600 dark:text-blue-400",
     bgColor: "bg-blue-500/10",
     borderActive: "border-blue-500",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="8" cy="21" r="1" />
-        <circle cx="19" cy="21" r="1" />
-        <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
-      </svg>
-    ),
+    icon: <LazadaIcon />,
   },
   {
     id: "amazon",
@@ -102,14 +61,7 @@ const PLATFORMS = [
     color: "text-yellow-600 dark:text-yellow-400",
     bgColor: "bg-yellow-500/10",
     borderActive: "border-yellow-500",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m7.5 4.27 9 5.15" />
-        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-        <path d="m3.3 7 8.7 5 8.7-5" />
-        <path d="M12 22V12" />
-      </svg>
-    ),
+    icon: <AmazonIcon />,
   },
   {
     id: "tiktok",
@@ -117,12 +69,7 @@ const PLATFORMS = [
     color: "text-pink-600 dark:text-pink-400",
     bgColor: "bg-pink-500/10",
     borderActive: "border-pink-500",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m12 8-9.04 9.06a2.82 2.82 0 1 0 3.98 3.98L16 12" />
-        <circle cx="17" cy="7" r="5" />
-      </svg>
-    ),
+    icon: <TikTokIcon />,
   },
 ];
 
@@ -367,13 +314,13 @@ export function HomePage() {
       {showResultsLoader && <FullscreenLoader />}
 
       {/* Compact header */}
-      <div className="flex items-center gap-3">
-        <ShieldIcon />
+      <header className="flex items-center gap-3">
+        <ShieldCheckIcon className="text-primary" />
         <div>
           <h1 className="text-lg font-semibold leading-tight">Review Analyzer</h1>
           <p className="text-xs text-muted-foreground">Detect fake reviews with ML</p>
         </div>
-      </div>
+      </header>
 
       {/* Platform grid */}
       <div className="grid w-full max-w-lg grid-cols-2 gap-2">
@@ -438,6 +385,7 @@ export function HomePage() {
                 size="sm"
                 onClick={() => setShowStopDialog(true)}
                 className="gap-2 text-muted-foreground"
+                aria-label="Stop capture"
               >
                 <StopIcon />
                 Stop
@@ -457,6 +405,7 @@ export function HomePage() {
                 }
                 disabled={ocrLoading ? ocrStopPending : captureStopPending}
                 className="gap-2"
+                aria-label="Stop analysis"
               >
                 <StopIcon />
                 Stop
@@ -491,6 +440,7 @@ export function HomePage() {
                         }}
                         disabled={selectedPages === Infinity}
                         className="w-20 rounded border px-2 py-1 text-center text-sm tabular-nums disabled:opacity-50"
+                        aria-label="Number of pages to capture"
                       />
                     </div>
                     <label className="flex items-center gap-2 text-sm cursor-pointer">

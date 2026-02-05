@@ -1,10 +1,17 @@
+import os
 import joblib
 import numpy as np
 
-model = joblib.load("models/fraud_model_2.pkl")
-vectorizer = joblib.load("models/fraud_vectorizer_2.pkl")
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_MODEL_PATH = os.path.join(_BASE_DIR, "models", "fraud_model_2.pkl")
+_VECTORIZER_PATH = os.path.join(_BASE_DIR, "models", "fraud_vectorizer_2.pkl")
 
-DECISION_THRESHOLD = 0.6
+model = joblib.load(_MODEL_PATH)
+vectorizer = joblib.load(_VECTORIZER_PATH)
+
+from config import FRAUD_DECISION_THRESHOLD
+
+DECISION_THRESHOLD = FRAUD_DECISION_THRESHOLD
 
 
 def analyze_fraud_2(text):

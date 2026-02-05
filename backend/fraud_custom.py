@@ -1,12 +1,25 @@
 import re
+import threading
 
 from transformers import pipeline
 
-_classifier = pipeline(
-    "text-classification",
-    model="textattack/roberta-base-SST-2",
-    top_k=None,
-)
+# Lazy-loaded classifier to avoid blocking server startup
+_classifier = None
+_classifier_lock = threading.Lock()
+
+
+def _get_classifier():
+    """Lazy-load the classifier on first use."""
+    global _classifier
+    if _classifier is None:
+        with _classifier_lock:
+            if _classifier is None:
+                _classifier = pipeline(
+                    "text-classification",
+                    model="textattack/roberta-base-SST-2",
+                    top_k=None,
+                )
+    return _classifier
 
 PROMO_PHRASES = {
     "highly recommended",
@@ -25,8 +38,10 @@ HEURISTIC_WEIGHTS = {
     "promo_phrases": 0.15,
 }
 
-DECISION_THRESHOLD = 0.6
-BLEND_WEIGHTS = {"model": 0.7, "heuristic": 0.3}
+from config import FRAUD_DECISION_THRESHOLD, FRAUD_BLEND_WEIGHTS
+
+DECISION_THRESHOLD = FRAUD_DECISION_THRESHOLD
+BLEND_WEIGHTS = FRAUD_BLEND_WEIGHTS
 
 
 def _heuristic_breakdown(text: str) -> dict:
@@ -72,8 +87,9 @@ def _heuristic_breakdown(text: str) -> dict:
 
 
 def analyze_fraud(text):
-    # RoBERTa inference
-    raw_scores = _classifier(text[:512])[0]
+    # RoBERTa inference (lazy-loaded)
+    classifier = _get_classifier()
+    raw_scores = classifier(text[:512])[0]
     raw_model_scores = {item["label"]: round(item["score"], 4) for item in raw_scores}
 
     # RoBERTa SST-2: LABEL_1 = positive sentiment ≈ "genuine", LABEL_0 = negative ≈ "suspicious"

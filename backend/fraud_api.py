@@ -1,7 +1,10 @@
+import logging
 import os
 from typing import Dict, Union
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 HF_FRAUD_MODEL = "https://api-inference.huggingface.co/models/textattack/roberta-base-SST-2"
@@ -14,7 +17,9 @@ GENUINE_HINTS = {
     "okay", "average", "not bad", "decent", "broke", "poor", "returned",
 }
 
-DECISION_THRESHOLD = 0.5
+from config import FRAUD_DECISION_THRESHOLD
+
+DECISION_THRESHOLD = FRAUD_DECISION_THRESHOLD
 
 
 def _fallback_fraud(text: str) -> Dict[str, Union[bool, float, str]]:
@@ -70,20 +75,24 @@ def analyze_fraud_api(text: str) -> Dict[str, Union[bool, float, str]]:
             positive_score = label_scores.get("LABEL_1", 0.0)
 
             confidence = float(positive_score)
-            is_fake = confidence > 0.7
+            is_fake = confidence > DECISION_THRESHOLD
 
             return {
                 "is_fake": is_fake,
                 "confidence": confidence,
                 "model_name": "HuggingFace API",
                 "is_fallback": False,
-                "decision_threshold": 0.7,
+                "decision_threshold": DECISION_THRESHOLD,
                 "raw_scores": {
                     "LABEL_0": round(negative_score, 4),
                     "LABEL_1": round(positive_score, 4),
                 },
             }
-    except Exception:
-        pass
+    except requests.exceptions.Timeout:
+        logger.warning("HuggingFace API timeout for fraud detection, using fallback")
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"HuggingFace API request failed for fraud detection: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error in fraud API: {e}", exc_info=True)
 
     return _fallback_fraud(text)

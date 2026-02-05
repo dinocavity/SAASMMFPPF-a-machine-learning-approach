@@ -1,41 +1,27 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/contexts/ToastContext";
 import { useOcr } from "./useOcr";
+import { usePhaseProgress } from "./usePhaseProgress";
+import { useCaptureState } from "./useCaptureState";
+import { useOcrState } from "./useOcrState";
+import { usePlatformDetection } from "./usePlatformDetection";
 import { ACTION_TYPES, PHASES } from "@/lib/constants";
 
 export function useAnalysis() {
   const { toast } = useToast();
   const ocr = useOcr();
 
+  // Use extracted hooks for better maintainability
+  const phaseState = usePhaseProgress();
+  const captureState = useCaptureState();
+  const ocrState = useOcrState();
+  const platformState = usePlatformDetection();
+
   const [results, setResults] = useState(null);
   const [resultsSaved, setResultsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const [autoFlowActive, setAutoFlowActive] = useState(false);
-  const [autoFlowStatus, setAutoFlowStatus] = useState("");
-  const [autoFlowProgress, setAutoFlowProgress] = useState(0);
-  const [autoFlowTotal, setAutoFlowTotal] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
-
-  // Page detection state
-  const [detectedPages, setDetectedPages] = useState(null);
-  const [selectedPages, setSelectedPages] = useState(1);
-  const [captureMetadata, setCaptureMetadata] = useState(null);
-
-  // Pause between pages state
-  const [pagePaused, setPagePaused] = useState(false);
-  const [capturedPageCount, setCapturedPageCount] = useState(0);
-  const [capturedScreenshotCount, setCapturedScreenshotCount] = useState(0);
-  const [pageScreenshotCounts, setPageScreenshotCounts] = useState([]);
-  const [pagesCaptured, setPagesCaptured] = useState(0);
-  const [pausedOcrText, setPausedOcrText] = useState("");
-  const [pausedOcrRemainingScreenshots, setPausedOcrRemainingScreenshots] = useState([]);
-  const [pausedOcrTotalScreenshots, setPausedOcrTotalScreenshots] = useState(0);
-  const [pausedOcrCompletedScreenshots, setPausedOcrCompletedScreenshots] = useState(0);
-  const ocrPauseRequestedRef = useRef(false);
-  const ocrTerminatedRef = useRef(false);
 
   // Product name state
   const [productName, setProductName] = useState(null);
@@ -47,159 +33,36 @@ export function useAnalysis() {
   const analysisSourceRef = useRef({ url: null, productName: null });
   const startUrlRef = useRef(null);
 
-  // Current tab URL & supported-page detection
-  const [currentTabUrl, setCurrentTabUrl] = useState(null);
-
-  // Phase progress state
-  const [phase, setPhase] = useState(PHASES.IDLE);
-  const [phaseProgress, setPhaseProgress] = useState(0);
-  const [phaseDetail, setPhaseDetail] = useState("");
-
-  const cancelRef = useRef(false);
-  const autoFlowActiveRef = useRef(false);
-  const phaseRef = useRef(PHASES.IDLE);
-  const scrollTimeoutRef = useRef(null);
-  const ocrUiThrottleRef = useRef({ t: 0, p: -1 });
-
-  // Supported-domain check
-  const SUPPORTED_DOMAINS = [
-    'shopee.ph', 'shopee.com',
-    'lazada.com', 'lazada.sg', 'lazada.com.ph',
-    'lazada.vn', 'lazada.co.id', 'lazada.co.th', 'lazada.com.my',
-    'amazon.com', 'amazon.com.ph', 'amazon.sg', 'amazon.co.jp',
-    'tiktok.com',
-  ];
-
-  const isSupportedDomain = useCallback((url) => {
-    if (!url) return false;
-    if (/^(chrome|edge|about|chrome-extension):/.test(url)) return false;
-    try {
-      const hostname = new URL(url).hostname.toLowerCase();
-      return SUPPORTED_DOMAINS.some(
-        (d) => hostname === d || hostname.endsWith('.' + d)
-      );
-    } catch { return false; }
-  }, []);
-
-  const isProductPage = useCallback((url) => {
-    if (!url || !isSupportedDomain(url)) return false;
-    try {
-      const parsed = new URL(url);
-      const hostname = parsed.hostname.toLowerCase();
-      const pathname = parsed.pathname.toLowerCase();
-
-      // Shopee product pages: contain "-i." followed by shop_id.item_id
-      if (SUPPORTED_DOMAINS.some((d) => (d.startsWith('shopee') && (hostname === d || hostname.endsWith('.' + d))))) {
-        return /-i\.\d+\.\d+/.test(pathname);
-      }
-
-      // Lazada product pages: /products/ path or -i<item_id> pattern
-      if (SUPPORTED_DOMAINS.some((d) => (d.startsWith('lazada') && (hostname === d || hostname.endsWith('.' + d))))) {
-        return /\/products\//.test(pathname) || /-i\d+/.test(pathname);
-      }
-
-      // Amazon product pages: /dp/ or /gp/product/ in pathname
-      if (SUPPORTED_DOMAINS.some((d) => (d.startsWith('amazon') && (hostname === d || hostname.endsWith('.' + d))))) {
-        return /\/dp\//.test(pathname) || /\/gp\/product\//.test(pathname);
-      }
-
-      // TikTok Shop product pages: /product/ or /shop/.../pdp/ in pathname
-      if (hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com')) {
-        return /\/product\//.test(pathname) || /\/shop\/.+\/pdp\//.test(pathname) || /\/pdp\//.test(pathname);
-      }
-
-      return false;
-    } catch { return false; }
-  }, [isSupportedDomain]);
-
-  const isSupportedUrl = useCallback((url) => {
-    return isSupportedDomain(url);
-  }, [isSupportedDomain]);
-
-  const getPlatformFromUrl = useCallback((url) => {
-    if (!url) return null;
-    try {
-      const hostname = new URL(url).hostname.toLowerCase();
-      if (SUPPORTED_DOMAINS.some((d) => d.startsWith('shopee') && (hostname === d || hostname.endsWith('.' + d)))) return 'shopee';
-      if (SUPPORTED_DOMAINS.some((d) => d.startsWith('lazada') && (hostname === d || hostname.endsWith('.' + d)))) return 'lazada';
-      if (SUPPORTED_DOMAINS.some((d) => d.startsWith('amazon') && (hostname === d || hostname.endsWith('.' + d)))) return 'amazon';
-      if (hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com')) return 'tiktok';
-      return null;
-    } catch { return null; }
-  }, []);
-
-  const currentPlatform = useMemo(
-    () => getPlatformFromUrl(currentTabUrl),
-    [currentTabUrl, getPlatformFromUrl]
-  );
-
   const reset = useCallback(() => {
     setResults(null);
     setLoading(false);
     setError("");
     setResultsSaved(false);
-    setAutoFlowActive(false);
-    setAutoFlowStatus("");
-    setAutoFlowProgress(0);
-    setAutoFlowTotal(0);
-    setElapsed(0);
-    setDetectedPages(null);
-    setSelectedPages(1);
-    setCaptureMetadata(null);
-    setPagePaused(false);
-    setCapturedPageCount(0);
-    setCapturedScreenshotCount(0);
-    setPageScreenshotCounts([]);
-    setPagesCaptured(0);
-    setPausedOcrText("");
-    setPausedOcrRemainingScreenshots([]);
-    setPausedOcrTotalScreenshots(0);
-    setPausedOcrCompletedScreenshots(0);
-    ocrTerminatedRef.current = false;
-    ocrPauseRequestedRef.current = false;
     setProductName(null);
     productNameRef.current = null;
     setPageUrl(null);
     setAnalysisSource({ url: null, productName: null });
     analysisSourceRef.current = { url: null, productName: null };
-    setPhase(PHASES.IDLE);
-    setPhaseProgress(0);
-    setPhaseDetail("");
-    cancelRef.current = false;
+    phaseState.resetPhase();
+    captureState.resetCapture();
+    ocrState.resetOcrState();
     ocr.reset();
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-      scrollTimeoutRef.current = null;
-    }
-  }, [ocr]);
+  }, [ocr, phaseState, captureState, ocrState]);
 
-  const isSupportedPage = useMemo(
-    () => currentTabUrl === null ? true : isProductPage(currentTabUrl),
-    [currentTabUrl, isProductPage]
-  );
-
-  // Timer for elapsed time
+  // Timer for elapsed time (extended to include OCR loading)
   useEffect(() => {
-    if (!autoFlowActive && !ocr.loading) {
-      setElapsed(0);
+    if (!captureState.autoFlowActive && !ocr.loading) {
+      captureState.setElapsed(0);
       return;
     }
 
     const start = Date.now();
     const timer = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - start) / 1000));
+      captureState.setElapsed(Math.floor((Date.now() - start) / 1000));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [autoFlowActive, ocr.loading]);
-
-  useEffect(() => {
-    autoFlowActiveRef.current = autoFlowActive;
-  }, [autoFlowActive]);
-
-  useEffect(() => {
-    phaseRef.current = phase;
-  }, [phase]);
+  }, [captureState.autoFlowActive, ocr.loading]);
 
   // Chrome extension message listener
   useEffect(() => {
@@ -207,158 +70,151 @@ export function useAnalysis() {
 
     const handler = (message) => {
       if (message.action === ACTION_TYPES.ANALYSIS_SCROLLING) {
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
+        if (captureState.scrollTimeoutRef.current) {
+          clearTimeout(captureState.scrollTimeoutRef.current);
         }
-        scrollTimeoutRef.current = setTimeout(() => {
-          if (autoFlowActiveRef.current && phaseRef.current === PHASES.SCROLLING) {
+        captureState.scrollTimeoutRef.current = setTimeout(() => {
+          if (captureState.autoFlowActiveRef.current && phaseState.phaseRef.current === PHASES.SCROLLING) {
             const messageText = "Capture timed out while waiting for reviews. Try again.";
             setError(messageText);
-            setAutoFlowStatus(messageText);
-            setAutoFlowActive(false);
-            setPhase(PHASES.ERROR);
-            setPhaseProgress(0);
-            setPhaseDetail(messageText);
+            captureState.setAutoFlowStatus(messageText);
+            captureState.setAutoFlowActive(false);
+            phaseState.setPhaseState(PHASES.ERROR, 0, messageText);
             toast.error(messageText);
           }
         }, 30000);
       }
 
       if (message.action === ACTION_TYPES.ANALYSIS_PROGRESS) {
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-          scrollTimeoutRef.current = null;
+        if (captureState.scrollTimeoutRef.current) {
+          clearTimeout(captureState.scrollTimeoutRef.current);
+          captureState.scrollTimeoutRef.current = null;
         }
-        setAutoFlowActive(true);
-        setAutoFlowProgress(message.current || 0);
-        setAutoFlowTotal(message.total || 0);
-        setAutoFlowStatus(
+        captureState.setAutoFlowActive(true);
+        captureState.setAutoFlowProgress(message.current || 0);
+        captureState.setAutoFlowTotal(message.total || 0);
+        captureState.setAutoFlowStatus(
           `Captured ${message.current || 0}/${message.total || 0} screenshots`
         );
-        setPhase(PHASES.CAPTURING);
+        phaseState.setPhase(PHASES.CAPTURING);
         const cur = message.current || 0;
         const tot = message.total || 1;
         const currentPage = Number.isFinite(message.page)
           ? message.page
-          : Math.max(capturedPageCount, 0) + 1;
+          : Math.max(captureState.capturedPageCount, 0) + 1;
         const targetPages =
-          selectedPages === Infinity
+          captureState.selectedPages === Infinity
             ? Number.isFinite(message.pageTotal)
               ? message.pageTotal
-              : detectedPages && detectedPages > 0
-                ? detectedPages
+              : captureState.detectedPages && captureState.detectedPages > 0
+                ? captureState.detectedPages
                 : null
             : Number.isFinite(message.pageTotal)
               ? message.pageTotal
-              : selectedPages;
-        setPhaseProgress(Math.round((cur / tot) * 100));
-        const pageDetail = selectedPages === Infinity || !Number.isFinite(message.pageTotal)
+              : captureState.selectedPages;
+        phaseState.setPhaseProgress(Math.round((cur / tot) * 100));
+        const pageDetail = captureState.selectedPages === Infinity || !Number.isFinite(message.pageTotal)
           ? `Page ${currentPage}`
           : `Page ${currentPage} of ${targetPages || "?"}`;
-        setPhaseDetail(
+        phaseState.setPhaseDetail(
           `Capturing screenshot ${cur} (up to ${tot}) • ${pageDetail}`
         );
       }
 
       if (message.action === ACTION_TYPES.ANALYSIS_SCREENSHOTS) {
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-          scrollTimeoutRef.current = null;
+        if (captureState.scrollTimeoutRef.current) {
+          clearTimeout(captureState.scrollTimeoutRef.current);
+          captureState.scrollTimeoutRef.current = null;
         }
         const shots = message.screenshots || [];
         if (!shots.length) {
-          setAutoFlowStatus("No screenshots captured.");
-          setAutoFlowActive(false);
+          captureState.setAutoFlowStatus("No screenshots captured.");
+          captureState.setAutoFlowActive(false);
           return;
         }
-        if (cancelRef.current) {
-          setAutoFlowStatus("Analysis cancelled.");
-          setAutoFlowActive(false);
+        if (captureState.cancelRef.current) {
+          captureState.setAutoFlowStatus("Analysis cancelled.");
+          captureState.setAutoFlowActive(false);
           return;
         }
-        setAutoFlowStatus("Running OCR on captured screenshots...");
-        setPhase(PHASES.OCR);
-        setPhaseProgress(0);
-        setPhaseDetail("Starting OCR...");
+        captureState.setAutoFlowStatus("Running OCR on captured screenshots...");
+        phaseState.setPhaseState(PHASES.OCR, 0, "Starting OCR...");
         if (typeof message.pagesCaptured === "number") {
-          setPagesCaptured(message.pagesCaptured);
+          captureState.setPagesCaptured(message.pagesCaptured);
         } else {
-          setPagesCaptured(1);
+          captureState.setPagesCaptured(1);
         }
         if (Array.isArray(message.pageScreenshotCounts)) {
-          setPageScreenshotCounts(message.pageScreenshotCounts);
+          captureState.setPageScreenshotCounts(message.pageScreenshotCounts);
         } else if (shots.length) {
-          setPageScreenshotCounts([shots.length]);
+          captureState.setPageScreenshotCounts([shots.length]);
         }
         runOcrFlow(shots);
       }
 
       if (message.action === ACTION_TYPES.ANALYSIS_PAGE_COMPLETE) {
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-          scrollTimeoutRef.current = null;
+        if (captureState.scrollTimeoutRef.current) {
+          clearTimeout(captureState.scrollTimeoutRef.current);
+          captureState.scrollTimeoutRef.current = null;
         }
-        setPagePaused(true);
-        setCapturedPageCount(message.page || 1);
-        setCapturedScreenshotCount(message.totalScreenshots || 0);
+        captureState.setPagePaused(true);
+        captureState.setCapturedPageCount(message.page || 1);
+        captureState.setCapturedScreenshotCount(message.totalScreenshots || 0);
         if (typeof message.page === "number") {
-          setPagesCaptured(message.page);
+          captureState.setPagesCaptured(message.page);
         }
         if (typeof message.pageScreenshotCount === "number") {
-          setPageScreenshotCounts((prev) => {
+          captureState.setPageScreenshotCounts((prev) => {
             const next = [...prev];
             next[(message.page || 1) - 1] = message.pageScreenshotCount;
             return next;
           });
         }
-        setAutoFlowStatus(
+        captureState.setAutoFlowStatus(
           `Page ${message.page || 1} captured (${message.totalScreenshots || 0} screenshots)`
         );
         const targetPages =
-          selectedPages === Infinity
-            ? detectedPages && detectedPages > 0
-              ? detectedPages
+          captureState.selectedPages === Infinity
+            ? captureState.detectedPages && captureState.detectedPages > 0
+              ? captureState.detectedPages
               : null
-            : selectedPages;
-        setPhaseDetail(
+            : captureState.selectedPages;
+        phaseState.setPhaseDetail(
           `Page ${message.page || 1} of ${targetPages || "?"} captured`
         );
       }
 
       if (message.action === ACTION_TYPES.ANALYSIS_STOPPED) {
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-          scrollTimeoutRef.current = null;
+        if (captureState.scrollTimeoutRef.current) {
+          clearTimeout(captureState.scrollTimeoutRef.current);
+          captureState.scrollTimeoutRef.current = null;
         }
-        setAutoFlowStatus("Analysis stopped.");
-        setAutoFlowActive(false);
-        setAutoFlowProgress(0);
-        setAutoFlowTotal(0);
-        cancelRef.current = true;
-        ocrPauseRequestedRef.current = false;
-        setPhase(PHASES.IDLE);
-        setPhaseProgress(0);
-        setPhaseDetail("");
+        captureState.setAutoFlowStatus("Analysis stopped.");
+        captureState.setAutoFlowActive(false);
+        captureState.setAutoFlowProgress(0);
+        captureState.setAutoFlowTotal(0);
+        captureState.cancelRef.current = true;
+        ocrState.ocrPauseRequestedRef.current = false;
+        phaseState.resetPhase();
       }
+
       if (message.action === ACTION_TYPES.ANALYSIS_ERROR) {
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-          scrollTimeoutRef.current = null;
+        if (captureState.scrollTimeoutRef.current) {
+          clearTimeout(captureState.scrollTimeoutRef.current);
+          captureState.scrollTimeoutRef.current = null;
         }
         const messageText = message.message || "Failed to find review section.";
         setError(messageText);
-        setAutoFlowStatus(messageText);
-        setAutoFlowActive(false);
-        setPhase(PHASES.ERROR);
-        setPhaseProgress(0);
-        setPhaseDetail(messageText);
+        captureState.setAutoFlowStatus(messageText);
+        captureState.setAutoFlowActive(false);
+        phaseState.setPhaseState(PHASES.ERROR, 0, messageText);
         toast.error(messageText);
       }
     };
 
     chrome.runtime.onMessage.addListener(handler);
     return () => chrome.runtime.onMessage.removeListener(handler);
-  }, []);
+  }, [captureState, phaseState, ocrState, toast]);
 
   // Tab-change detection — silently reset when idle
   useEffect(() => {
@@ -367,11 +223,11 @@ export function useAnalysis() {
     const handler = (message) => {
       if (message.action !== ACTION_TYPES.TAB_CHANGED) return;
 
-      setCurrentTabUrl(message.url);
+      platformState.setCurrentTabUrl(message.url);
 
       // Only reset when NOT actively working
       const isIdle =
-        !autoFlowActiveRef.current && !ocr.loading && !pagePaused;
+        !captureState.autoFlowActiveRef.current && !ocr.loading && !captureState.pagePaused;
       if (isIdle) {
         reset();
       }
@@ -379,16 +235,7 @@ export function useAnalysis() {
 
     chrome.runtime.onMessage.addListener(handler);
     return () => chrome.runtime.onMessage.removeListener(handler);
-  }, [ocr.loading, pagePaused, reset]);
-
-  // Initialize current tab URL on mount
-  useEffect(() => {
-    if (!chrome?.tabs?.query) return;
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (chrome.runtime.lastError || !tabs[0]) return;
-      setCurrentTabUrl(tabs[0].url);
-    });
-  }, []);
+  }, [ocr.loading, captureState.pagePaused, reset, platformState]);
 
   const fetchProductName = useCallback((options = {}) => {
     const { expectedUrl = null, lockForAnalysis = false } = options;
@@ -442,8 +289,8 @@ export function useAnalysis() {
   const detectPages = useCallback(() => {
     return new Promise((resolve) => {
       if (!chrome?.runtime?.sendMessage) {
-        setDetectedPages(1);
-        setSelectedPages(1);
+        captureState.setDetectedPages(1);
+        captureState.setSelectedPages(1);
         resolve(1);
         return;
       }
@@ -452,14 +299,14 @@ export function useAnalysis() {
         { action: ACTION_TYPES.DETECT_PAGES },
         (response) => {
           const pages = response?.totalPages || 1;
-          setDetectedPages(pages);
+          captureState.setDetectedPages(pages);
           // For unknown (-1), default to 5 pages; otherwise 1
-          setSelectedPages(pages === -1 ? 5 : Math.min(pages, 1));
+          captureState.setSelectedPages(pages === -1 ? 5 : Math.min(pages, 1));
           resolve(pages);
         }
       );
     });
-  }, []);
+  }, [captureState]);
 
   const analyzeText = useCallback(
     async (text) => {
@@ -472,33 +319,27 @@ export function useAnalysis() {
       setError("");
       setResults(null);
       setResultsSaved(false);
-      setPhase(PHASES.ANALYZING);
-      setPhaseProgress(0);
-      setPhaseDetail("Running ML models...");
+      phaseState.setPhaseState(PHASES.ANALYZING, 0, "Running ML models...");
 
       try {
         const response = await api.post("/analyze", { text });
         setResults(response.data);
-        setAutoFlowStatus("Analysis complete.");
-        setPhase(PHASES.COMPLETE);
-        setPhaseProgress(100);
-        setPhaseDetail("Analysis complete");
+        captureState.setAutoFlowStatus("Analysis complete.");
+        phaseState.setPhaseState(PHASES.COMPLETE, 100, "Analysis complete");
         toast.success("Analysis complete");
         return response.data;
       } catch (err) {
         const message = err.response?.data?.detail || "Failed to analyze review. Please try again.";
         setError(message);
-        setAutoFlowStatus("Analysis failed.");
-        setPhase(PHASES.ERROR);
-        setPhaseProgress(0);
-        setPhaseDetail(message);
+        captureState.setAutoFlowStatus("Analysis failed.");
+        phaseState.setPhaseState(PHASES.ERROR, 0, message);
         toast.error(message);
         return null;
       } finally {
         setLoading(false);
       }
     },
-    [toast]
+    [toast, phaseState, captureState]
   );
 
   const runOcrFlow = useCallback(
@@ -513,13 +354,13 @@ export function useAnalysis() {
           );
           const now = Date.now();
           const clamped = Math.min(Math.max(overallProgress, 2), 100);
-          const last = ocrUiThrottleRef.current;
+          const last = ocrState.ocrUiThrottleRef.current;
           if (now - last.t > 150 || clamped !== last.p) {
-            ocrUiThrottleRef.current = { t: now, p: clamped };
-            setAutoFlowStatus(`OCR progress: ${Math.min(overallProgress, 100)}%`);
-            setPhase(PHASES.OCR);
-            setPhaseProgress(clamped);
-            setPhaseDetail(`Processing image ${completedScreenshots + imageIndex} of ${totalScreenshots}`);
+            ocrState.ocrUiThrottleRef.current = { t: now, p: clamped };
+            captureState.setAutoFlowStatus(`OCR progress: ${Math.min(overallProgress, 100)}%`);
+            phaseState.setPhase(PHASES.OCR);
+            phaseState.setPhaseProgress(clamped);
+            phaseState.setPhaseDetail(`Processing image ${completedScreenshots + imageIndex} of ${totalScreenshots}`);
           }
         });
 
@@ -531,52 +372,46 @@ export function useAnalysis() {
           ? `${prefixText}\n\n${text}`
           : prefixText || text;
 
-        if (cancelRef.current || !combinedText) {
-          if (ocrTerminatedRef.current) {
-            ocrTerminatedRef.current = false;
-            setAutoFlowStatus("OCR terminated.");
-            setAutoFlowActive(false);
-            setPhase(PHASES.IDLE);
-            setPhaseProgress(0);
-            setPhaseDetail("OCR terminated");
+        if (captureState.cancelRef.current || !combinedText) {
+          if (ocrState.ocrTerminatedRef.current) {
+            ocrState.ocrTerminatedRef.current = false;
+            captureState.setAutoFlowStatus("OCR terminated.");
+            captureState.setAutoFlowActive(false);
+            phaseState.setPhaseState(PHASES.IDLE, 0, "OCR terminated");
             return;
           }
-          setAutoFlowStatus("Analysis cancelled.");
-          setAutoFlowActive(false);
-          setPhase(PHASES.IDLE);
-          setPhaseProgress(0);
-          setPhaseDetail("");
+          captureState.setAutoFlowStatus("Analysis cancelled.");
+          captureState.setAutoFlowActive(false);
+          phaseState.resetPhase();
           return;
         }
 
         // Store capture metadata
-        setCaptureMetadata({
-          totalPages: pagesCaptured || selectedPages,
-          totalScreenshots: pageScreenshotCounts?.length
-            ? pageScreenshotCounts.reduce((sum, count) => sum + (count || 0), 0)
+        captureState.setCaptureMetadata({
+          totalPages: captureState.pagesCaptured || captureState.selectedPages,
+          totalScreenshots: captureState.pageScreenshotCounts?.length
+            ? captureState.pageScreenshotCounts.reduce((sum, count) => sum + (count || 0), 0)
             : screenshots.length,
-          pageScreenshotCounts,
+          pageScreenshotCounts: captureState.pageScreenshotCounts,
           ocrTextLength: combinedText.length,
           ocrWordCount: combinedText.split(/\s+/).filter(Boolean).length,
           capturedTextPreview: combinedText.slice(0, 200),
           productName: productNameRef.current,
         });
 
-        if (ocrPauseRequestedRef.current) {
-          ocrPauseRequestedRef.current = false;
-          setPausedOcrText(combinedText);
-          setPausedOcrRemainingScreenshots(screenshots.slice(nextIndex));
-          setPausedOcrTotalScreenshots(totalScreenshots);
-          setPausedOcrCompletedScreenshots(nextCompleted);
-          setAutoFlowStatus("OCR paused.");
-          setAutoFlowActive(false);
-          setPhase(PHASES.IDLE);
-          setPhaseProgress(0);
-          setPhaseDetail("OCR paused");
+        if (ocrState.ocrPauseRequestedRef.current) {
+          ocrState.ocrPauseRequestedRef.current = false;
+          ocrState.setPausedOcrText(combinedText);
+          ocrState.setPausedOcrRemainingScreenshots(screenshots.slice(nextIndex));
+          ocrState.setPausedOcrTotalScreenshots(totalScreenshots);
+          ocrState.setPausedOcrCompletedScreenshots(nextCompleted);
+          captureState.setAutoFlowStatus("OCR paused.");
+          captureState.setAutoFlowActive(false);
+          phaseState.setPhaseState(PHASES.IDLE, 0, "OCR paused");
           return;
         }
 
-        setAutoFlowStatus(
+        captureState.setAutoFlowStatus(
           stoppedEarly
             ? "OCR stopped early. Running analysis..."
             : "OCR complete. Running analysis..."
@@ -584,59 +419,51 @@ export function useAnalysis() {
         await analyzeText(combinedText);
       } catch (err) {
         toast.error("OCR failed. Try again or use a clearer page.");
-        setPhase(PHASES.ERROR);
-        setPhaseProgress(0);
-        setPhaseDetail("OCR failed");
+        phaseState.setPhaseState(PHASES.ERROR, 0, "OCR failed");
       } finally {
-        setAutoFlowActive(false);
+        captureState.setAutoFlowActive(false);
       }
     },
-    [ocr, analyzeText, toast, selectedPages]
+    [ocr, analyzeText, toast, captureState, ocrState, phaseState]
   );
 
   const startCapture = useCallback(
     async (pagesToCapture) => {
-      const pages = pagesToCapture || selectedPages;
-      setAutoFlowStatus("Starting review capture...");
-      setAutoFlowActive(true);
-      setAutoFlowProgress(0);
-      setAutoFlowTotal(0);
+      const pages = pagesToCapture || captureState.selectedPages;
+      captureState.setAutoFlowStatus("Starting review capture...");
+      captureState.setAutoFlowActive(true);
+      captureState.setAutoFlowProgress(0);
+      captureState.setAutoFlowTotal(0);
       setResults(null);
       setResultsSaved(false);
       setError("");
-      setCaptureMetadata(null);
-      setPagePaused(false);
-      setCapturedPageCount(0);
-      setCapturedScreenshotCount(0);
-      cancelRef.current = false;
-      ocrPauseRequestedRef.current = false;
-      ocrTerminatedRef.current = false;
-      setPausedOcrText("");
-      setPausedOcrRemainingScreenshots([]);
-      setPausedOcrTotalScreenshots(0);
-      setPausedOcrCompletedScreenshots(0);
-      setPhase(PHASES.SCROLLING);
-      setPhaseProgress(0);
-      setPhaseDetail("Scrolling to reviews...");
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
+      captureState.setCaptureMetadata(null);
+      captureState.setPagePaused(false);
+      captureState.setCapturedPageCount(0);
+      captureState.setCapturedScreenshotCount(0);
+      captureState.cancelRef.current = false;
+      ocrState.ocrPauseRequestedRef.current = false;
+      ocrState.ocrTerminatedRef.current = false;
+      ocrState.resetOcrState();
+      phaseState.setPhaseState(PHASES.SCROLLING, 0, "Scrolling to reviews...");
+
+      if (captureState.scrollTimeoutRef.current) {
+        clearTimeout(captureState.scrollTimeoutRef.current);
       }
-      scrollTimeoutRef.current = setTimeout(() => {
-        if (autoFlowActiveRef.current && phaseRef.current === PHASES.SCROLLING) {
+      captureState.scrollTimeoutRef.current = setTimeout(() => {
+        if (captureState.autoFlowActiveRef.current && phaseState.phaseRef.current === PHASES.SCROLLING) {
           const messageText = "Capture did not start. Try again or reload the page.";
           setError(messageText);
-          setAutoFlowStatus(messageText);
-          setAutoFlowActive(false);
-          setPhase(PHASES.ERROR);
-          setPhaseProgress(0);
-          setPhaseDetail(messageText);
+          captureState.setAutoFlowStatus(messageText);
+          captureState.setAutoFlowActive(false);
+          phaseState.setPhaseState(PHASES.ERROR, 0, messageText);
           toast.error(messageText);
         }
       }, 30000);
 
       // Capture source URL/name snapshot before starting capture
       const activeUrl = await getActiveTabUrl();
-      const startUrl = activeUrl ?? currentTabUrl ?? pageUrl;
+      const startUrl = activeUrl ?? platformState.currentTabUrl ?? pageUrl;
       const startName = productNameRef.current ?? productName;
       const initialSource = { url: startUrl, productName: startName };
       analysisSourceRef.current = initialSource;
@@ -661,8 +488,8 @@ export function useAnalysis() {
               pauseEachPage: false,
               totalPagesKnown:
                 pages === Infinity
-                  ? detectedPages && detectedPages > 1
-                    ? detectedPages
+                  ? captureState.detectedPages && captureState.detectedPages > 1
+                    ? captureState.detectedPages
                     : null
                   : pages,
             }
@@ -672,210 +499,188 @@ export function useAnalysis() {
         { action: ACTION_TYPES.START_ANALYSIS, pagination },
         () => {
           if (chrome.runtime.lastError) {
-            setAutoFlowStatus("Failed to start capture.");
-            setAutoFlowActive(false);
+            captureState.setAutoFlowStatus("Failed to start capture.");
+            captureState.setAutoFlowActive(false);
             toast.error("Failed to start capture");
           }
         }
       );
     },
-    [toast, selectedPages, fetchProductName, pageUrl, productName, currentTabUrl, getActiveTabUrl]
+    [toast, captureState, ocrState, phaseState, fetchProductName, pageUrl, productName, platformState, getActiveTabUrl]
   );
 
   const continueCapture = useCallback(() => {
-    setPagePaused(false);
-    setAutoFlowStatus("Continuing to next page...");
+    captureState.setPagePaused(false);
+    captureState.setAutoFlowStatus("Continuing to next page...");
     chrome.runtime.sendMessage(
       { action: ACTION_TYPES.CONTINUE_PAGINATION },
       () => {
         if (chrome.runtime.lastError) {
-          setAutoFlowStatus("Failed to continue capture.");
+          captureState.setAutoFlowStatus("Failed to continue capture.");
         }
       }
     );
-  }, [capturedPageCount, selectedPages, detectedPages, toast]);
+  }, [captureState]);
 
   const pauseAfterPage = useCallback(() => {
-    setAutoFlowStatus("Will pause after this page...");
+    captureState.setAutoFlowStatus("Will pause after this page...");
     chrome.runtime.sendMessage(
       { action: ACTION_TYPES.PAUSE_AFTER_PAGE },
       () => {
         if (chrome.runtime.lastError) {
-          setAutoFlowStatus("Failed to pause capture.");
+          captureState.setAutoFlowStatus("Failed to pause capture.");
         }
       }
     );
-  }, []);
+  }, [captureState]);
 
   const analyzeNow = useCallback(() => {
-    setPagePaused(false);
-    setAutoFlowStatus("Finishing current page before analyzing...");
+    captureState.setPagePaused(false);
+    captureState.setAutoFlowStatus("Finishing current page before analyzing...");
     chrome.runtime.sendMessage(
       { action: ACTION_TYPES.ANALYZE_NOW },
       () => {
         if (chrome.runtime.lastError) {
-          setAutoFlowStatus("Failed to trigger analysis.");
+          captureState.setAutoFlowStatus("Failed to trigger analysis.");
         }
       }
     );
-  }, []);
+  }, [captureState]);
 
   const analyzePausedOcr = useCallback(() => {
-    if (!pausedOcrText) return;
-    const textToAnalyze = pausedOcrText;
-    setPausedOcrText("");
-    setAutoFlowStatus("Analyzing paused OCR...");
+    if (!ocrState.pausedOcrText) return;
+    const textToAnalyze = ocrState.pausedOcrText;
+    ocrState.setPausedOcrText("");
+    captureState.setAutoFlowStatus("Analyzing paused OCR...");
     analyzeText(textToAnalyze);
-  }, [pausedOcrText, analyzeText]);
+  }, [ocrState, analyzeText, captureState]);
 
   const resumeOcr = useCallback(() => {
-    if (!pausedOcrRemainingScreenshots.length) return;
-    const prefixText = pausedOcrText;
-    const totalScreenshots = pausedOcrTotalScreenshots || pausedOcrRemainingScreenshots.length;
-    const completedScreenshots = pausedOcrCompletedScreenshots || 0;
-    setPausedOcrText("");
-    setPausedOcrRemainingScreenshots([]);
-    setPausedOcrTotalScreenshots(0);
-    setPausedOcrCompletedScreenshots(0);
-    setAutoFlowActive(true);
-    setAutoFlowStatus("Resuming OCR...");
-    setPhase(PHASES.OCR);
-    setPhaseProgress(Math.min(Math.max(Math.round((completedScreenshots / totalScreenshots) * 100), 2), 100));
-    setPhaseDetail("Resuming OCR...");
-    runOcrFlow(pausedOcrRemainingScreenshots, {
+    if (!ocrState.pausedOcrRemainingScreenshots.length) return;
+    const prefixText = ocrState.pausedOcrText;
+    const totalScreenshots = ocrState.pausedOcrTotalScreenshots || ocrState.pausedOcrRemainingScreenshots.length;
+    const completedScreenshots = ocrState.pausedOcrCompletedScreenshots || 0;
+    ocrState.resetOcrState();
+    captureState.setAutoFlowActive(true);
+    captureState.setAutoFlowStatus("Resuming OCR...");
+    phaseState.setPhase(PHASES.OCR);
+    phaseState.setPhaseProgress(Math.min(Math.max(Math.round((completedScreenshots / totalScreenshots) * 100), 2), 100));
+    phaseState.setPhaseDetail("Resuming OCR...");
+    runOcrFlow(ocrState.pausedOcrRemainingScreenshots, {
       prefixText,
       totalScreenshots,
       completedScreenshots,
     });
-  }, [
-    pausedOcrRemainingScreenshots,
-    pausedOcrText,
-    pausedOcrTotalScreenshots,
-    pausedOcrCompletedScreenshots,
-    runOcrFlow,
-  ]);
+  }, [ocrState, captureState, phaseState, runOcrFlow]);
 
   const pauseOcr = useCallback(() => {
     if (!ocr.loading) return;
-    ocrPauseRequestedRef.current = true;
+    ocrState.ocrPauseRequestedRef.current = true;
     ocr.stopAfterCurrent();
-    setAutoFlowStatus("Pausing OCR after current image...");
-    setPhaseDetail("Pausing OCR");
-  }, [ocr]);
+    captureState.setAutoFlowStatus("Pausing OCR after current image...");
+    phaseState.setPhaseDetail("Pausing OCR");
+  }, [ocr, ocrState, captureState, phaseState]);
 
   const terminateOcr = useCallback(() => {
     if (!ocr.loading) return;
-    ocrPauseRequestedRef.current = false;
-    ocrTerminatedRef.current = true;
-    setPausedOcrText("");
-    setPausedOcrRemainingScreenshots([]);
-    setPausedOcrTotalScreenshots(0);
-    setPausedOcrCompletedScreenshots(0);
-    setAutoFlowStatus("OCR terminated.");
-    setAutoFlowActive(false);
-    setPhase(PHASES.IDLE);
-    setPhaseProgress(0);
-    setPhaseDetail("OCR terminated");
+    ocrState.ocrPauseRequestedRef.current = false;
+    ocrState.ocrTerminatedRef.current = true;
+    ocrState.resetOcrState();
+    captureState.setAutoFlowStatus("OCR terminated.");
+    captureState.setAutoFlowActive(false);
+    phaseState.setPhaseState(PHASES.IDLE, 0, "OCR terminated");
     ocr.terminateNow();
-  }, [ocr]);
+  }, [ocr, ocrState, captureState, phaseState]);
 
   const stopAndAnalyze = useCallback(() => {
     if (ocr.loading) {
-      setAutoFlowStatus("Stopping OCR after current image...");
-      setPhaseDetail("Stopping after current image");
-      ocrPauseRequestedRef.current = false;
+      captureState.setAutoFlowStatus("Stopping OCR after current image...");
+      phaseState.setPhaseDetail("Stopping after current image");
+      ocrState.ocrPauseRequestedRef.current = false;
       ocr.stopAfterCurrent();
       return;
     }
 
-    if (autoFlowActive) {
+    if (captureState.autoFlowActive) {
       analyzeNow();
     }
-  }, [ocr, autoFlowActive, analyzeNow]);
+  }, [ocr, captureState, phaseState, ocrState, analyzeNow]);
 
   const stopCapture = useCallback(() => {
-    cancelRef.current = true;
-    ocrPauseRequestedRef.current = false;
-    setPausedOcrText("");
-    setPausedOcrRemainingScreenshots([]);
-    setPausedOcrTotalScreenshots(0);
-    setPausedOcrCompletedScreenshots(0);
-    ocrTerminatedRef.current = false;
+    captureState.cancelRef.current = true;
+    ocrState.ocrPauseRequestedRef.current = false;
+    ocrState.resetOcrState();
+    ocrState.ocrTerminatedRef.current = false;
     ocr.cancel();
 
     chrome.runtime.sendMessage({ action: ACTION_TYPES.STOP_ANALYSIS }, () => {
       if (chrome.runtime.lastError) {
-        setAutoFlowStatus("Failed to stop capture.");
+        captureState.setAutoFlowStatus("Failed to stop capture.");
       } else {
-        setAutoFlowStatus("Stopping...");
+        captureState.setAutoFlowStatus("Stopping...");
       }
     });
-  }, [ocr]);
+  }, [ocr, captureState, ocrState]);
 
   const terminateCapture = useCallback(() => {
-    cancelRef.current = true;
-    ocrPauseRequestedRef.current = false;
-    ocrTerminatedRef.current = false;
-    setPausedOcrText("");
-    setPausedOcrRemainingScreenshots([]);
-    setPausedOcrTotalScreenshots(0);
-    setPausedOcrCompletedScreenshots(0);
-    setAutoFlowActive(false);
-    setAutoFlowStatus("Capture terminated.");
-    setAutoFlowProgress(0);
-    setAutoFlowTotal(0);
-    setPhase(PHASES.IDLE);
-    setPhaseProgress(0);
-    setPhaseDetail("Capture terminated");
-    setPagePaused(false);
+    captureState.cancelRef.current = true;
+    ocrState.ocrPauseRequestedRef.current = false;
+    ocrState.ocrTerminatedRef.current = false;
+    ocrState.resetOcrState();
+    captureState.setAutoFlowActive(false);
+    captureState.setAutoFlowStatus("Capture terminated.");
+    captureState.setAutoFlowProgress(0);
+    captureState.setAutoFlowTotal(0);
+    phaseState.setPhaseState(PHASES.IDLE, 0, "Capture terminated");
+    captureState.setPagePaused(false);
     ocr.cancel();
 
     chrome.runtime.sendMessage({ action: ACTION_TYPES.STOP_ANALYSIS }, () => {
       if (chrome.runtime.lastError) {
-        setAutoFlowStatus("Failed to stop capture.");
+        captureState.setAutoFlowStatus("Failed to stop capture.");
       }
     });
-  }, [ocr]);
+  }, [ocr, captureState, ocrState, phaseState]);
 
   // Calculate overall progress percentage
   const progressPercent = ocr.loading
     ? ocr.progress
-    : autoFlowTotal
-      ? Math.round((autoFlowProgress / autoFlowTotal) * 100)
+    : captureState.autoFlowTotal
+      ? Math.round((captureState.autoFlowProgress / captureState.autoFlowTotal) * 100)
       : 0;
 
   return {
     results,
     loading,
     error,
-    autoFlowActive,
-    autoFlowStatus,
-    autoFlowProgress,
-    autoFlowTotal,
-    elapsed,
+    autoFlowActive: captureState.autoFlowActive,
+    autoFlowStatus: captureState.autoFlowStatus,
+    autoFlowProgress: captureState.autoFlowProgress,
+    autoFlowTotal: captureState.autoFlowTotal,
+    elapsed: captureState.elapsed,
     progressPercent,
     ocrLoading: ocr.loading,
     ocrProgress: ocr.progress,
     ocrError: ocr.error,
-    detectedPages,
-    selectedPages,
-    setSelectedPages,
-    captureMetadata,
+    detectedPages: captureState.detectedPages,
+    selectedPages: captureState.selectedPages,
+    setSelectedPages: captureState.setSelectedPages,
+    captureMetadata: captureState.captureMetadata,
     productName,
     pageUrl,
     analysisSource,
-    currentTabUrl,
-    currentPlatform,
-    isSupportedPage,
-    isOnSupportedDomain: currentTabUrl === null ? true : isSupportedDomain(currentTabUrl),
-    phase,
-    phaseProgress,
-    phaseDetail,
-    pagePaused,
-    capturedPageCount,
-    capturedScreenshotCount,
-    pageScreenshotCounts,
-    pagesCaptured,
+    currentTabUrl: platformState.currentTabUrl,
+    currentPlatform: platformState.currentPlatform,
+    isSupportedPage: platformState.isSupportedPage,
+    isOnSupportedDomain: platformState.isOnSupportedDomain,
+    phase: phaseState.phase,
+    phaseProgress: phaseState.phaseProgress,
+    phaseDetail: phaseState.phaseDetail,
+    pagePaused: captureState.pagePaused,
+    capturedPageCount: captureState.capturedPageCount,
+    capturedScreenshotCount: captureState.capturedScreenshotCount,
+    pageScreenshotCounts: captureState.pageScreenshotCounts,
+    pagesCaptured: captureState.pagesCaptured,
     detectPages,
     startCapture,
     stopCapture,
@@ -893,11 +698,11 @@ export function useAnalysis() {
     reset,
     resultsSaved,
     setResultsSaved,
-    pausedOcrText,
-    setPausedOcrText,
-    pausedOcrRemainingScreenshots,
-    setPausedOcrRemainingScreenshots,
-    pausedOcrTotalScreenshots,
-    pausedOcrCompletedScreenshots,
+    pausedOcrText: ocrState.pausedOcrText,
+    setPausedOcrText: ocrState.setPausedOcrText,
+    pausedOcrRemainingScreenshots: ocrState.pausedOcrRemainingScreenshots,
+    setPausedOcrRemainingScreenshots: ocrState.setPausedOcrRemainingScreenshots,
+    pausedOcrTotalScreenshots: ocrState.pausedOcrTotalScreenshots,
+    pausedOcrCompletedScreenshots: ocrState.pausedOcrCompletedScreenshots,
   };
 }

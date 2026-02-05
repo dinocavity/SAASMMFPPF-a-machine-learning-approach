@@ -1,10 +1,24 @@
+import threading
+
 from transformers import pipeline
 
-_classifier = pipeline(
-    "sentiment-analysis",
-    model="cardiffnlp/twitter-roberta-base-sentiment-latest",
-    top_k=None,
-)
+# Lazy-loaded classifier to avoid blocking server startup
+_classifier = None
+_classifier_lock = threading.Lock()
+
+
+def _get_classifier():
+    """Lazy-load the classifier on first use."""
+    global _classifier
+    if _classifier is None:
+        with _classifier_lock:
+            if _classifier is None:
+                _classifier = pipeline(
+                    "sentiment-analysis",
+                    model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+                    top_k=None,
+                )
+    return _classifier
 
 # Map model labels to normalized names
 _LABEL_MAP = {
@@ -15,7 +29,8 @@ _LABEL_MAP = {
 
 
 def analyze_sentiment_custom(text):
-    raw_scores = _classifier(text[:512])[0]
+    classifier = _get_classifier()
+    raw_scores = classifier(text[:512])[0]
 
     class_probabilities = {}
     for item in raw_scores:

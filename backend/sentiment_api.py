@@ -1,7 +1,10 @@
+import logging
 import os
 from typing import Dict, Union
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 HF_MODEL = os.getenv(
     "HUGGINGFACE_API_URL",
@@ -65,7 +68,11 @@ def analyze_sentiment_api(text: str):
                 "is_fallback": False,
                 "raw_api_scores": raw_api_scores,
             }
-    except Exception:
-        pass
+    except requests.exceptions.Timeout:
+        logger.warning("HuggingFace API timeout for sentiment analysis, using fallback")
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"HuggingFace API request failed for sentiment analysis: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error in sentiment API: {e}", exc_info=True)
 
     return _fallback_sentiment(text)

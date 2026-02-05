@@ -1,8 +1,13 @@
+import os
 import joblib
 import numpy as np
 
-model = joblib.load("models/custom_sentiment_2.pkl")
-vectorizer = joblib.load("models/vectorizer_2.pkl")
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_MODEL_PATH = os.path.join(_BASE_DIR, "models", "custom_sentiment_2.pkl")
+_VECTORIZER_PATH = os.path.join(_BASE_DIR, "models", "vectorizer_2.pkl")
+
+model = joblib.load(_MODEL_PATH)
+vectorizer = joblib.load(_VECTORIZER_PATH)
 
 
 def analyze_sentiment_2(text):
