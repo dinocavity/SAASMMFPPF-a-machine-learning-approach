@@ -3,8 +3,8 @@ import joblib
 import numpy as np
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-_MODEL_PATH = os.path.join(_BASE_DIR, "models", "custom_sentiment_2.pkl")
-_VECTORIZER_PATH = os.path.join(_BASE_DIR, "models", "vectorizer_2.pkl")
+_MODEL_PATH = os.path.join(_BASE_DIR, "models", "sentiment_svm.pkl")
+_VECTORIZER_PATH = os.path.join(_BASE_DIR, "models", "sentiment_svm_vectorizer.pkl")
 
 model = joblib.load(_MODEL_PATH)
 vectorizer = joblib.load(_VECTORIZER_PATH)

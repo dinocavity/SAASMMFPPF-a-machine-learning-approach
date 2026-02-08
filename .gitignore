@@ -58,3 +58,5 @@ extension/*.xpi
 .vscode/
 .DS_Store
 Thumbs.db
+.claude/
+CLAUDE.md

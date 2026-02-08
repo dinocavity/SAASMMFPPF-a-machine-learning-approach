@@ -159,12 +159,12 @@ Request body:
 }
 ```
 Response includes accuracy, precision, recall, F1, ROC-AUC (when possible), and a confusion matrix for:
-- `sentiment_api` — HuggingFace API sentiment model
-- `sentiment_custom` — RoBERTa local sentiment model
+- `sentiment_distilbert_api` — HuggingFace API (DistilBERT) sentiment model
+- `sentiment_roberta_local` — RoBERTa local sentiment model
 - `sentiment_svm` — SVM local sentiment model
-- `authenticity_lr` — RoBERTa local fraud model
-- `authenticity_rf` — Random Forest local fraud model
-- `authenticity_api` — HuggingFace API fraud model
+- `fraud_roberta_api` — HuggingFace API (RoBERTa) fraud model
+- `fraud_roberta_local` — RoBERTa local fraud model
+- `fraud_random_forest` — Random Forest local fraud model
 
 ## Limitations
 1. Screenshot quality affects OCR accuracy.

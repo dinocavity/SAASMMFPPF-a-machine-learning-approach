@@ -6,7 +6,18 @@ import { usePhaseProgress } from "./usePhaseProgress";
 import { useCaptureState } from "./useCaptureState";
 import { useOcrState } from "./useOcrState";
 import { usePlatformDetection } from "./usePlatformDetection";
-import { ACTION_TYPES, PHASES } from "@/lib/constants";
+import { ACTION_TYPES, PHASES, FRAUD_MODEL_IDS, SENTIMENT_MODEL_IDS } from "@/lib/constants";
+
+const DISABLED_MODELS_KEY = "saasmmfppf_disabled_models";
+
+function loadDisabledModels() {
+  try {
+    const raw = localStorage.getItem(DISABLED_MODELS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
 
 export function useAnalysis() {
   const { toast } = useToast();
@@ -22,6 +33,40 @@ export function useAnalysis() {
   const [resultsSaved, setResultsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Model toggle state (persisted in localStorage)
+  const [disabledModels, setDisabledModels] = useState(() => loadDisabledModels());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DISABLED_MODELS_KEY, JSON.stringify(disabledModels));
+    } catch {
+      // localStorage unavailable
+    }
+  }, [disabledModels]);
+
+  const toggleModel = useCallback((modelId) => {
+    setDisabledModels((prev) => {
+      const isCurrentlyDisabled = prev.includes(modelId);
+      if (isCurrentlyDisabled) {
+        // Re-enable: just remove from list
+        return prev.filter((id) => id !== modelId);
+      }
+      // Disabling: check minimum constraints
+      const nextDisabled = [...prev, modelId];
+      const enabledFraud = FRAUD_MODEL_IDS.filter((id) => !nextDisabled.includes(id));
+      const enabledSentiment = SENTIMENT_MODEL_IDS.filter((id) => !nextDisabled.includes(id));
+      if (enabledFraud.length < 1) {
+        toast.error("At least 1 fraud model must remain enabled");
+        return prev;
+      }
+      if (enabledSentiment.length < 1) {
+        toast.error("At least 1 sentiment model must remain enabled");
+        return prev;
+      }
+      return nextDisabled;
+    });
+  }, [toast]);
 
   // Product name state
   const [productName, setProductName] = useState(null);
@@ -322,7 +367,11 @@ export function useAnalysis() {
       phaseState.setPhaseState(PHASES.ANALYZING, 0, "Running ML models...");
 
       try {
-        const response = await api.post("/analyze", { text });
+        const payload = { text };
+        if (disabledModels.length > 0) {
+          payload.disabled_models = disabledModels;
+        }
+        const response = await api.post("/analyze", payload);
         setResults(response.data);
         captureState.setAutoFlowStatus("Analysis complete.");
         phaseState.setPhaseState(PHASES.COMPLETE, 100, "Analysis complete");
@@ -339,7 +388,7 @@ export function useAnalysis() {
         setLoading(false);
       }
     },
-    [toast, phaseState, captureState]
+    [toast, phaseState, captureState, disabledModels]
   );
 
   const runOcrFlow = useCallback(
@@ -698,6 +747,8 @@ export function useAnalysis() {
     reset,
     resultsSaved,
     setResultsSaved,
+    disabledModels,
+    toggleModel,
     pausedOcrText: ocrState.pausedOcrText,
     setPausedOcrText: ocrState.setPausedOcrText,
     pausedOcrRemainingScreenshots: ocrState.pausedOcrRemainingScreenshots,

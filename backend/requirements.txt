@@ -8,3 +8,5 @@ joblib
 transformers
 torch
 python-dotenv
+datasets
+slowapi

@@ -3,41 +3,16 @@ import { useAnalysisContext } from "@/contexts/AnalysisContext";
 import { useHistoryContext } from "@/contexts/HistoryContext";
 import { ResultsSummary } from "@/components/results/ResultsSummary";
 import { Button } from "@/components/ui/button";
-
-const ArrowLeftIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="19" y1="12" x2="5" y2="12" />
-    <polyline points="12 19 5 12 12 5" />
-  </svg>
-);
-
-const EmptyIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/30">
-    <line x1="18" y1="20" x2="18" y2="10" />
-    <line x1="12" y1="20" x2="12" y2="4" />
-    <line x1="6" y1="20" x2="6" y2="14" />
-  </svg>
-);
-
-const InfoIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
-);
+import {
+  ArrowLeftIcon,
+  EmptyResultsIcon as EmptyIcon,
+  InfoIcon,
+  SpinnerIcon,
+} from "@/components/ui/icons";
 
 const FullscreenLoader = () => (
   <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95">
-    <svg
-      className="h-10 w-10 animate-spin text-primary"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-    </svg>
+    <SpinnerIcon size={40} className="text-primary" />
     <div className="text-center">
       <p className="text-sm font-medium">Preparing analysis results...</p>
       <p className="text-xs text-muted-foreground">This usually takes a few seconds.</p>

@@ -57,6 +57,7 @@ export function useHistory() {
       date: new Date().toISOString(),
       results: entry.results,
       captureMetadata: entry.captureMetadata || null,
+      disabledModels: entry.disabledModels || [],
       fraudVerdict: extractFraudVerdict(entry.results),
       sentimentVerdict: extractSentimentVerdict(entry.results),
     };

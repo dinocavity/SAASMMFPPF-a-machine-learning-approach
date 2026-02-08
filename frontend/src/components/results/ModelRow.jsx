@@ -2,30 +2,11 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBar, ConfidenceComparison } from "./ConfidenceBar";
 import { MODEL_DESCRIPTIONS, SIGNAL_EXPLANATIONS } from "@/lib/constants";
-
-/* ── tiny icons ─────────────────────────────────────── */
-
-const ChevronDown = ({ className = "" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
-);
-
-const InfoIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
-);
-
-const SignalIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
+import {
+  ChevronDownIcon as ChevronDown,
+  InfoIcon,
+  SignalIcon,
+} from "@/components/ui/icons";
 
 /* ── sub-components for expanded details ────────────── */
 
@@ -181,7 +162,7 @@ function InfoTooltip({ modelKey, type }) {
   return (
     <span className="group relative inline-flex">
       <span className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground">
-        <InfoIcon />
+        <InfoIcon size={13} />
       </span>
       <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-lg border bg-popover p-3 text-xs leading-relaxed text-popover-foreground opacity-0 shadow-lg transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
         <span className="font-semibold">How this model works</span>
@@ -199,6 +180,17 @@ export function FraudModelRow({ model, modelKey, modelName }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!model) return null;
+
+  if (model.status === "disabled") {
+    return (
+      <div className="rounded-lg border border-dashed border-muted-foreground/30 p-3 opacity-60">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-muted-foreground">{modelName}</span>
+          <Badge variant="outline" className="text-muted-foreground text-[10px]">Disabled</Badge>
+        </div>
+      </div>
+    );
+  }
 
   const isError = model.status === "error";
 
@@ -246,7 +238,7 @@ export function FraudModelRow({ model, modelKey, modelName }) {
 
         {/* expand chevron */}
         {hasDetails && (
-          <ChevronDown className={`shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
+          <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
         )}
       </button>
 
@@ -260,7 +252,7 @@ export function FraudModelRow({ model, modelKey, modelName }) {
         <div className="flex flex-wrap gap-1 px-3 pb-2">
           {signals.slice(0, 3).map((s) => (
             <span key={s} className="inline-flex items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" title={SIGNAL_EXPLANATIONS[s] || s}>
-              <SignalIcon /> {s.replace(/-/g, " ")}
+              <SignalIcon size={11} /> {s.replace(/-/g, " ")}
             </span>
           ))}
           {signals.length > 3 && <span className="text-[10px] text-muted-foreground self-center">+{signals.length - 3} more</span>}
@@ -305,7 +297,7 @@ export function FraudModelRow({ model, modelKey, modelName }) {
               <ul className="space-y-1">
                 {signals.map((signal, i) => (
                   <li key={i} className="flex items-start gap-1.5 rounded bg-amber-50 p-2 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                    <SignalIcon />
+                    <SignalIcon size={11} />
                     <span>
                       <span className="font-medium capitalize">{signal.replace(/-/g, " ")}</span>
                       {SIGNAL_EXPLANATIONS[signal] && (
@@ -327,6 +319,17 @@ export function SentimentModelRow({ model, modelKey, modelName }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!model) return null;
+
+  if (model.status === "disabled") {
+    return (
+      <div className="rounded-lg border border-dashed border-muted-foreground/30 p-3 opacity-60">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-muted-foreground">{modelName}</span>
+          <Badge variant="outline" className="text-muted-foreground text-[10px]">Disabled</Badge>
+        </div>
+      </div>
+    );
+  }
 
   const isError = model.status === "error";
 
@@ -375,7 +378,7 @@ export function SentimentModelRow({ model, modelKey, modelName }) {
 
         {/* expand chevron */}
         {hasDetails && (
-          <ChevronDown className={`shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
+          <ChevronDown size={14} className={`shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
         )}
       </button>
 

@@ -1,12 +1,7 @@
 import { PHASE_LABELS } from "@/lib/constants";
+import { CheckIcon } from "@/components/ui/icons";
 
 const PHASE_ORDER = ["scrolling", "capturing", "ocr", "analyzing", "complete"];
-
-const CheckIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-);
 
 export function PhaseProgress({ phase, phaseProgress, phaseDetail }) {
   const activeIndex = PHASE_ORDER.indexOf(phase);
@@ -44,7 +39,7 @@ export function PhaseProgress({ phase, phaseProgress, phaseDetail }) {
                         : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {isComplete ? <CheckIcon /> : i + 1}
+                  {isComplete ? <CheckIcon strokeWidth={3} /> : i + 1}
                 </div>
 
                 {/* Connector line after */}

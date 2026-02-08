@@ -22,7 +22,11 @@ import {
   LazadaIcon,
   AmazonIcon,
   TikTokIcon,
+  SettingsIcon,
+  ChevronDownIcon,
 } from "@/components/ui/icons";
+import { ModelConfig } from "@/components/analysis/ModelConfig";
+import { MODEL_IDS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const isExtension =
@@ -123,6 +127,8 @@ export function HomePage() {
     isOnSupportedDomain,
     currentTabUrl,
     currentPlatform,
+    disabledModels,
+    toggleModel,
   } = useAnalysisContext();
 
   const { addEntry, getEntryByUrl } = useHistoryContext();
@@ -150,6 +156,7 @@ export function HomePage() {
         productName: analysisSource?.productName || productName,
         results,
         captureMetadata,
+        disabledModels,
       });
       setResultsSaved(true);
       setShowResultsLoader(true);
@@ -168,7 +175,7 @@ export function HomePage() {
         resultsTimerRef.current = null;
       }
     }
-  }, [results, loading, autoFlowActive, navigate, addEntry, pageUrl, productName, captureMetadata, resultsSaved, setResultsSaved]);
+  }, [results, loading, autoFlowActive, navigate, addEntry, pageUrl, productName, captureMetadata, resultsSaved, setResultsSaved, disabledModels]);
 
   useEffect(() => {
     return () => {
@@ -351,6 +358,26 @@ export function HomePage() {
           );
         })}
       </div>
+
+      {/* Model configuration (only visible when idle) */}
+      {!isBusy && !showPageSelector && !pausedOcrText && (
+        <details className="w-full max-w-lg group">
+          <summary className="flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted list-none [&::-webkit-details-marker]:hidden">
+            <SettingsIcon className="text-muted-foreground" />
+            <span>Model Configuration</span>
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+              {MODEL_IDS.length - disabledModels.length}/{MODEL_IDS.length}
+            </Badge>
+            <ChevronDownIcon
+              size={14}
+              className="ml-auto text-muted-foreground transition-transform group-open:rotate-180"
+            />
+          </summary>
+          <div className="mt-2">
+            <ModelConfig disabledModels={disabledModels} toggleModel={toggleModel} />
+          </div>
+        </details>
+      )}
 
       {/* Action card */}
       <Card className="w-full max-w-lg">

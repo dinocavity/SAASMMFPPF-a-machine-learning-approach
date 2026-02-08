@@ -3,8 +3,8 @@ import joblib
 import numpy as np
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-_MODEL_PATH = os.path.join(_BASE_DIR, "models", "fraud_model_2.pkl")
-_VECTORIZER_PATH = os.path.join(_BASE_DIR, "models", "fraud_vectorizer_2.pkl")
+_MODEL_PATH = os.path.join(_BASE_DIR, "models", "fraud_random_forest.pkl")
+_VECTORIZER_PATH = os.path.join(_BASE_DIR, "models", "fraud_random_forest_vectorizer.pkl")
 
 model = joblib.load(_MODEL_PATH)
 vectorizer = joblib.load(_VECTORIZER_PATH)

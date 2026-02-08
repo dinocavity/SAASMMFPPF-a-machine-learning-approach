@@ -60,6 +60,32 @@ export const CONFIDENCE_THRESHOLDS = {
   LOW: 0.3,
 };
 
+export const MODEL_IDS = [
+  "fraud_api", "fraud_local_1", "fraud_local_2",
+  "sentiment_api", "sentiment_local_1", "sentiment_local_2",
+];
+
+export const FRAUD_MODEL_IDS = ["fraud_api", "fraud_local_1", "fraud_local_2"];
+export const SENTIMENT_MODEL_IDS = ["sentiment_api", "sentiment_local_1", "sentiment_local_2"];
+
+export const MODEL_NAMES = {
+  fraud_api: "HuggingFace API (RoBERTa)",
+  fraud_local_1: "RoBERTa Transformer",
+  fraud_local_2: "Random Forest (TF-IDF)",
+  sentiment_api: "HuggingFace API (DistilBERT)",
+  sentiment_local_1: "RoBERTa (Twitter)",
+  sentiment_local_2: "SVM (TF-IDF)",
+};
+
+export const MODEL_SOURCES = {
+  fraud_api: "api",
+  fraud_local_1: "local",
+  fraud_local_2: "local",
+  sentiment_api: "api",
+  sentiment_local_1: "local",
+  sentiment_local_2: "local",
+};
+
 export const MODEL_DESCRIPTIONS = {
   api_fraud:
     "Uses a hosted transformer model via HuggingFace's Inference API. Text is tokenized and passed through a pre-trained deep neural network that classifies reviews based on patterns learned from large-scale datasets of real and fake reviews.",
