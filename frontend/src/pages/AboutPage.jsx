@@ -18,6 +18,7 @@ const GLOSSARY = [
   { term: "Coeff.", full: "Coefficient", explanation: "The weight a model (e.g., SVM) assigns to a feature; higher magnitude means stronger influence on the prediction." },
   { term: "Imp.", full: "Importance", explanation: "A Random Forest metric (Gini/entropy reduction) indicating how much a feature contributes to splitting decisions." },
   { term: "Heuristics", full: "Rule-based scoring", explanation: "Pattern-matching rules (e.g., exclamation density, caps ratio, promo phrases) used as a fallback or blend alongside model scores." },
+  { term: "Fallback mode", full: "Fallback mode", explanation: "When a cloud model (HuggingFace API) is unreachable due to no internet, a timeout, or a rate limit, the app automatically switches to a simpler rule-based heuristic instead. You still get a fraud or sentiment result — it is just less accurate than the real model. Fallback mode is indicated in the results breakdown when it occurs." },
 ];
 
 const PIPELINE_STEPS = [
