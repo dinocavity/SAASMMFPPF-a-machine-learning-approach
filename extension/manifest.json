@@ -31,7 +31,12 @@
     "https://*.lazada.vn/*",
     "https://*.lazada.co.id/*",
     "https://*.lazada.co.th/*",
-    "https://*.lazada.com.my/*"
+    "https://*.lazada.com.my/*",
+    "https://*.amazon.com/*",
+    "https://*.amazon.com.ph/*",
+    "https://*.amazon.sg/*",
+    "https://*.amazon.co.jp/*",
+    "https://*.tiktok.com/*"
   ],
   "content_scripts": [
     {
@@ -46,7 +51,12 @@
         "*://*.lazada.vn/*",
         "*://*.lazada.co.id/*",
         "*://*.lazada.co.th/*",
-        "*://*.lazada.com.my/*"
+        "*://*.lazada.com.my/*",
+        "*://*.amazon.com/*",
+        "*://*.amazon.com.ph/*",
+        "*://*.amazon.sg/*",
+        "*://*.amazon.co.jp/*",
+        "*://*.tiktok.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
