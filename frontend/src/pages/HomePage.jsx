@@ -1,0 +1,701 @@
+import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAnalysisContext } from "@/contexts/AnalysisContext";
+import { useHistoryContext } from "@/contexts/HistoryContext";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { PhaseProgress } from "@/components/ui/phase-progress";
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  ShieldCheckIcon,
+  CameraIcon,
+  StopIcon,
+  SpinnerIcon,
+  SettingsIcon,
+  ChevronDownIcon,
+} from "@/components/ui/icons";
+import { ModelConfig } from "@/components/analysis/ModelConfig";
+import { MODEL_IDS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+
+const isExtension =
+  typeof chrome !== "undefined" && !!chrome?.runtime?.id;
+
+const FullscreenLoader = () => (
+  <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95" role="status" aria-label="Loading results">
+    <SpinnerIcon size={40} className="text-primary" />
+    <div className="text-center">
+      <p className="text-sm font-medium">Preparing analysis results...</p>
+      <p className="text-xs text-muted-foreground">This usually takes a few seconds.</p>
+    </div>
+  </div>
+);
+
+
+export function HomePage() {
+  const navigate = useNavigate();
+  const {
+    results,
+    loading,
+    error,
+    autoFlowActive,
+    autoFlowStatus,
+    progressPercent,
+    detectedPages,
+    selectedPages,
+    setSelectedPages,
+    detectPages,
+    startCapture,
+    pagePaused,
+    capturedPageCount,
+    capturedScreenshotCount,
+    continueCapture,
+    analyzeNow,
+    pauseAfterPage,
+    pauseOcr,
+    analyzePausedOcr,
+    resumeOcr,
+    stopAndAnalyze,
+    terminateOcr,
+    terminateCapture,
+    phase,
+    phaseProgress,
+    phaseDetail,
+    captureMetadata,
+    productName,
+    pageUrl,
+    analysisSource,
+    fetchProductName,
+    resultsSaved,
+    setResultsSaved,
+    ocrLoading,
+    pagesCaptured,
+    pageScreenshotCounts,
+    pausedOcrText,
+    setPausedOcrText,
+    pausedOcrRemainingScreenshots,
+    setPausedOcrRemainingScreenshots,
+    pausedOcrTotalScreenshots,
+    pausedOcrCompletedScreenshots,
+    stopCapture,
+    isSupportedPage,
+    isOnSupportedDomain,
+    currentTabUrl,
+    disabledModels,
+    toggleModel,
+  } = useAnalysisContext();
+
+  const { addEntry, getEntryByUrl } = useHistoryContext();
+
+  const [showPageSelector, setShowPageSelector] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [captureAll, setCaptureAll] = useState(false);
+  const [duplicateEntry, setDuplicateEntry] = useState(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [showStopDialog, setShowStopDialog] = useState(false);
+  const [showOcrStopDialog, setShowOcrStopDialog] = useState(false);
+  const [ocrStopPending, setOcrStopPending] = useState(false);
+  const [captureStopPending, setCaptureStopPending] = useState(false);
+  const [showResultsLoader, setShowResultsLoader] = useState(false);
+  const [showProductRequired, setShowProductRequired] = useState(false);
+  const savedRef = useRef(false);
+  const resultsTimerRef = useRef(null);
+
+  // Navigate to results when analysis completes + save to history
+  useEffect(() => {
+    if (results && !loading && !autoFlowActive && !savedRef.current && !resultsSaved) {
+      savedRef.current = true;
+      addEntry({
+        url: analysisSource?.url || pageUrl,
+        productName: analysisSource?.productName || productName,
+        results,
+        captureMetadata,
+        disabledModels,
+      });
+      setResultsSaved(true);
+      setShowResultsLoader(true);
+      if (!resultsTimerRef.current) {
+        resultsTimerRef.current = setTimeout(() => {
+          resultsTimerRef.current = null;
+          navigate("/results");
+        }, 800);
+      }
+    }
+    if (!results) {
+      savedRef.current = false;
+      setShowResultsLoader(false);
+      if (resultsTimerRef.current) {
+        clearTimeout(resultsTimerRef.current);
+        resultsTimerRef.current = null;
+      }
+    }
+  }, [results, loading, autoFlowActive, navigate, addEntry, pageUrl, productName, captureMetadata, resultsSaved, setResultsSaved, disabledModels]);
+
+  useEffect(() => {
+    return () => {
+      if (resultsTimerRef.current) {
+        clearTimeout(resultsTimerRef.current);
+        resultsTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Reset local UI state when analysis context resets (e.g. tab change)
+  useEffect(() => {
+    if (detectedPages === null) {
+      setShowPageSelector(false);
+      setCaptureAll(false);
+      setDetecting(false);
+    }
+  }, [detectedPages]);
+
+  useEffect(() => {
+    setShowProductRequired(false);
+  }, [isSupportedPage, currentTabUrl]);
+
+  useEffect(() => {
+    if (!isSupportedPage) return;
+    fetchProductName();
+  }, [isSupportedPage, currentTabUrl, fetchProductName]);
+
+  const isBusy = loading || autoFlowActive;
+
+  const proceedWithCapture = async () => {
+    setDetecting(true);
+    try {
+      const pages = await detectPages();
+      if (pages > 1 || pages === -1) {
+        setShowPageSelector(true);
+      } else {
+        startCapture(1);
+      }
+    } catch {
+      startCapture(1);
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  const handleCaptureClick = async () => {
+    setDetecting(true);
+    try {
+      const { pageUrl: url, productName: name } = await fetchProductName();
+      if (!url || !name) {
+        setShowProductRequired(true);
+        setDetecting(false);
+        return;
+      }
+      const existing = getEntryByUrl(url);
+      if (existing) {
+        setDuplicateEntry(existing);
+        setShowDuplicateDialog(true);
+        setDetecting(false);
+        return;
+      }
+    } catch {
+      // ignore — proceed with capture
+    }
+    setDetecting(false);
+    setShowProductRequired(false);
+    proceedWithCapture();
+  };
+
+  const handleConfirmPages = () => {
+    setShowPageSelector(false);
+    startCapture(selectedPages);
+  };
+
+  const handleCancelPageSelect = () => {
+    setShowPageSelector(false);
+  };
+
+  const handlePauseAfterPage = () => {
+    setCaptureStopPending(true);
+    setShowStopDialog(false);
+    pauseAfterPage();
+  };
+
+  const handleStopAndAnalyze = () => {
+    setCaptureStopPending(true);
+    setShowStopDialog(false);
+    stopAndAnalyze();
+  };
+
+  const handleTerminateCapture = () => {
+    setCaptureStopPending(true);
+    setShowStopDialog(false);
+    terminateCapture();
+  };
+
+  const handleOcrPause = () => {
+    setOcrStopPending(true);
+    setShowOcrStopDialog(false);
+    pauseOcr();
+  };
+
+  const handleOcrTerminate = () => {
+    setOcrStopPending(true);
+    setShowOcrStopDialog(false);
+    terminateOcr();
+  };
+
+  const handleOcrStopAndAnalyze = () => {
+    setOcrStopPending(true);
+    setShowOcrStopDialog(false);
+    stopAndAnalyze();
+  };
+
+  const handleAnalyzePausedOcr = () => {
+    analyzePausedOcr();
+  };
+
+  const handleResumeOcr = () => {
+    resumeOcr();
+  };
+
+  const handleDiscardPausedOcr = () => {
+    setPausedOcrText("");
+    setPausedOcrRemainingScreenshots([]);
+  };
+
+  useEffect(() => {
+    if (!ocrLoading) {
+      setOcrStopPending(false);
+    }
+  }, [ocrLoading]);
+
+  useEffect(() => {
+    if (!autoFlowActive) {
+      setCaptureStopPending(false);
+    }
+  }, [autoFlowActive]);
+
+  return (
+    <div className="flex flex-col items-center gap-5 py-4">
+      {showResultsLoader && <FullscreenLoader />}
+
+      {/* Compact header */}
+      <header className="flex items-center gap-3">
+        <ShieldCheckIcon className="text-primary" />
+        <div>
+          <h1 className="text-lg font-semibold leading-tight">Review Analyzer</h1>
+          <p className="text-xs text-muted-foreground">Detect fake reviews with ML</p>
+        </div>
+      </header>
+
+      {/* Model configuration (only visible when idle) */}
+      {!isBusy && !showPageSelector && !pausedOcrText && (
+        <details className="w-full max-w-lg group">
+          <summary className="flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted list-none [&::-webkit-details-marker]:hidden">
+            <SettingsIcon className="text-muted-foreground" />
+            <span>Model Configuration</span>
+            <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+              {MODEL_IDS.length - disabledModels.length}/{MODEL_IDS.length}
+            </Badge>
+            <ChevronDownIcon
+              size={14}
+              className="ml-auto text-muted-foreground transition-transform group-open:rotate-180"
+            />
+          </summary>
+          <div className="mt-2">
+            <ModelConfig disabledModels={disabledModels} toggleModel={toggleModel} />
+          </div>
+        </details>
+      )}
+
+      {/* Action card */}
+      <Card className="w-full max-w-lg">
+        <CardContent className="p-6">
+          {isBusy && pagePaused ? (
+            <div className="grid gap-4">
+              <div className="text-center">
+                <p className="text-sm font-medium">
+                  Page {capturedPageCount} captured ({capturedScreenshotCount} screenshots)
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Continue to next page or analyze what you have so far
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={continueCapture}
+                >
+                  Continue Capturing
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={analyzeNow}
+                >
+                  Analyze Now
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowStopDialog(true)}
+                className="gap-2 text-muted-foreground"
+                aria-label="Stop capture"
+              >
+                <StopIcon />
+                Stop
+              </Button>
+            </div>
+          ) : isBusy ? (
+            <div className="grid gap-4">
+              <PhaseProgress
+                phase={phase}
+                phaseProgress={phaseProgress}
+                phaseDetail={phaseDetail}
+              />
+              <Button
+                variant="outline"
+                onClick={() =>
+                  ocrLoading ? setShowOcrStopDialog(true) : setShowStopDialog(true)
+                }
+                disabled={ocrLoading ? ocrStopPending : captureStopPending}
+                className="gap-2"
+                aria-label="Stop analysis"
+              >
+                <StopIcon />
+                Stop
+              </Button>
+            </div>
+          ) : showPageSelector ? (
+            <div className="grid gap-4">
+              {detectedPages === -1 ? (
+                /* Unknown total pages — show number input + All Pages option */
+                <>
+                  <div className="text-center">
+                    <p className="text-sm font-medium">
+                      Multiple review pages detected
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Enter how many pages to capture, or capture all
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Pages to capture</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={999}
+                        value={selectedPages === Infinity ? "" : selectedPages}
+                        placeholder="All"
+                        onChange={(e) => {
+                          const val = Number.parseInt(e.target.value, 10);
+                          setSelectedPages(Number.isFinite(val) && val > 0 ? val : 1);
+                        }}
+                        disabled={selectedPages === Infinity}
+                        className="w-20 rounded border px-2 py-1 text-center text-sm tabular-nums disabled:opacity-50"
+                        aria-label="Number of pages to capture"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedPages === Infinity}
+                        onChange={(e) =>
+                          setSelectedPages(e.target.checked ? Infinity : 5)
+                        }
+                        className="accent-primary"
+                      />
+                      <span>Capture all pages</span>
+                    </label>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={handleCancelPageSelect}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1 gap-2"
+                      onClick={handleConfirmPages}
+                    >
+                      <CameraIcon />
+                      {selectedPages === Infinity
+                        ? "Capture all pages"
+                        : `Capture ${selectedPages} page${selectedPages !== 1 ? "s" : ""}`}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                /* Known total pages — show slider */
+                <>
+                  <div className="text-center">
+                    <p className="text-sm font-medium">
+                      {detectedPages} review page{detectedPages !== 1 ? "s" : ""} detected
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Select how many pages to analyze
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Pages to capture</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={detectedPages}
+                        value={selectedPages === detectedPages && captureAll ? "" : selectedPages}
+                        placeholder="All"
+                        onChange={(e) => {
+                          const val = Number.parseInt(e.target.value, 10);
+                          setCaptureAll(false);
+                          setSelectedPages(
+                            Number.isFinite(val) && val > 0
+                              ? Math.min(val, detectedPages)
+                              : 1
+                          );
+                        }}
+                        disabled={captureAll}
+                        className="w-20 rounded border px-2 py-1 text-center text-sm tabular-nums disabled:opacity-50"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={captureAll}
+                        onChange={(e) => {
+                          setCaptureAll(e.target.checked);
+                          setSelectedPages(e.target.checked ? detectedPages : 5);
+                        }}
+                        className="accent-primary"
+                      />
+                      <span>Capture all {detectedPages} pages</span>
+                    </label>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={handleCancelPageSelect}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1 gap-2"
+                      onClick={handleConfirmPages}
+                    >
+                      <CameraIcon />
+                      {captureAll
+                        ? `Capture all ${detectedPages} pages`
+                        : `Capture ${selectedPages} page${selectedPages !== 1 ? "s" : ""}`}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : pausedOcrText ? (
+            <div className="grid gap-3 text-center">
+              <p className="text-sm font-medium">OCR paused</p>
+              <p className="text-xs text-muted-foreground">
+                Paused at image {Math.min(pausedOcrCompletedScreenshots, pausedOcrTotalScreenshots) || 0}
+                {pausedOcrTotalScreenshots
+                  ? ` of ${pausedOcrTotalScreenshots}`
+                  : ""}. Resume OCR, analyze the extracted text, or discard it.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  variant="outline"
+                  onClick={handleResumeOcr}
+                  disabled={!pausedOcrRemainingScreenshots.length}
+                >
+                  Resume OCR
+                </Button>
+                <Button className="flex-1" onClick={handleAnalyzePausedOcr}>
+                  Analyze Now
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDiscardPausedOcr}
+                className="text-muted-foreground"
+              >
+                Discard
+              </Button>
+            </div>
+          ) : isExtension ? (
+            isSupportedPage ? (
+              productName && pageUrl ? (
+                <div className="grid gap-4">
+                  <Button
+                    onClick={handleCaptureClick}
+                    size="lg"
+                    className="gap-2 text-base"
+                    disabled={detecting}
+                  >
+                    <CameraIcon />
+                    {detecting ? "Detecting pages..." : "Capture & Analyze Reviews"}
+                  </Button>
+                  <p className="text-center text-xs text-muted-foreground">
+                    Make sure you're on a product page with visible reviews
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3 text-center">
+                  <p className="text-sm font-medium">Select a product first</p>
+                  <p className="text-xs text-muted-foreground">
+                    Open a product page with visible reviews to enable capture.
+                  </p>
+                </div>
+              )
+            ) : isOnSupportedDomain ? (
+              <div className="grid gap-3 text-center">
+                <p className="text-sm font-medium">Navigate to a product page</p>
+                <p className="text-xs text-muted-foreground">
+                  Open a specific product with reviews to capture and analyze.
+                  The homepage and category pages are not supported.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 text-center">
+                <p className="text-sm font-medium">Page not supported</p>
+                <p className="text-xs text-muted-foreground">
+                  Navigate to a product page on a supported platform to capture and
+                  analyze reviews.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Shopee &middot; Lazada &middot; Amazon &middot; TikTok Shop
+                </p>
+              </div>
+            )
+          ) : (
+            <div className="grid gap-3 text-center">
+              <p className="text-sm text-muted-foreground">
+                Install the Chrome extension to capture and analyze
+                reviews directly from product pages.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                The extension automatically screenshots reviews, extracts
+                text via OCR, and runs analysis through 6 ML models.
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 rounded-lg bg-destructive/5 px-4 py-3">
+              <p className="text-center text-sm text-destructive">{error}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Duplicate detection dialog */}
+      <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <DialogHeader>
+          <DialogTitle>Page Already Analyzed</DialogTitle>
+          <DialogDescription>
+            {duplicateEntry?.productName && (
+              <span className="font-medium">{duplicateEntry.productName}</span>
+            )}
+            {duplicateEntry?.productName && " was "}
+            {!duplicateEntry?.productName && "This page was "}
+            analyzed on{" "}
+            {duplicateEntry?.date &&
+              new Date(duplicateEntry.date).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            .
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowDuplicateDialog(false);
+              proceedWithCapture();
+            }}
+          >
+            Analyze Again
+          </Button>
+          <Button
+            onClick={() => {
+              setShowDuplicateDialog(false);
+              navigate(`/results?historyId=${duplicateEntry?.id}`);
+            }}
+          >
+            View Previous Results
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* Stop/pause dialog (capture) */}
+      <Dialog open={showStopDialog} onOpenChange={setShowStopDialog}>
+        <DialogHeader>
+          <DialogTitle>Stop Capture?</DialogTitle>
+          <DialogDescription>
+            You can pause after this page, or stop now and analyze what has already been captured.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={handlePauseAfterPage}
+            disabled={pagePaused}
+          >
+            Pause After This Page
+          </Button>
+          <Button variant="destructive" onClick={handleTerminateCapture}>
+            Terminate
+          </Button>
+          <Button onClick={handleStopAndAnalyze}>
+            Stop & Analyze
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* Stop/pause dialog (OCR) */}
+      <Dialog open={showOcrStopDialog} onOpenChange={setShowOcrStopDialog}>
+        <DialogHeader>
+          <DialogTitle>Stop OCR?</DialogTitle>
+          <DialogDescription>
+            Pause, terminate, or stop and analyze what's done so far.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={handleOcrPause}
+            disabled={ocrStopPending}
+          >
+            Pause OCR
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleOcrTerminate}
+            disabled={ocrStopPending}
+          >
+            Terminate
+          </Button>
+          <Button
+            onClick={handleOcrStopAndAnalyze}
+            disabled={ocrStopPending}
+          >
+            Stop & Analyze
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    </div>
+  );
+}

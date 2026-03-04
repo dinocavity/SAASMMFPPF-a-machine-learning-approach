@@ -6,7 +6,7 @@ export function Toaster() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-50 flex max-h-screen w-full max-w-sm flex-col gap-2"
+      className="fixed top-4 right-4 z-50 flex max-h-screen w-full max-w-xs flex-col gap-2"
       aria-label="Notifications"
     >
       {toasts.map((toast) => (
