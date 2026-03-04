@@ -1,7 +1,24 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-const PLATFORMS = ["Shopee", "Lazada", "Amazon", "TikTok Shop"];
+const GLOSSARY = [
+  { term: "SAASMMFPPF", full: "Sentiment Analysis and Social Media Monitoring for Preventing Purchase Fraud", explanation: "The full title of this project." },
+  { term: "ML", full: "Machine Learning", explanation: "Statistical algorithms that learn patterns from data without explicit programming." },
+  { term: "OCR", full: "Optical Character Recognition", explanation: "Technology that extracts text from images; used here via Tesseract.js in-browser." },
+  { term: "API", full: "Application Programming Interface", explanation: "A remote service endpoint; used here for HuggingFace cloud inference." },
+  { term: "NLP", full: "Natural Language Processing", explanation: "Field of AI focused on understanding and processing human language." },
+  { term: "RoBERTa", full: "Robustly Optimized BERT Pretraining Approach", explanation: "A transformer language model by Facebook AI; an improved version of BERT." },
+  { term: "BERT", full: "Bidirectional Encoder Representations from Transformers", explanation: "A foundational transformer model by Google for text understanding." },
+  { term: "DistilBERT", full: "Distilled BERT", explanation: "A smaller, faster variant of BERT retaining ~97% of performance with 40% fewer parameters." },
+  { term: "SST-2", full: "Stanford Sentiment Treebank v2", explanation: "A benchmark dataset for binary (positive/negative) sentiment classification." },
+  { term: "TF-IDF", full: "Term Frequency-Inverse Document Frequency", explanation: "A text feature weighting method that scores words higher if they appear often in a document but rarely across all documents." },
+  { term: "RF / Random Forest", full: "Random Forest", explanation: "An ensemble learning method that trains many decision trees and combines their votes for a final prediction." },
+  { term: "SVM", full: "Support Vector Machine", explanation: "A supervised classification algorithm that finds the optimal separating boundary between classes." },
+  { term: "HuggingFace", full: "HuggingFace", explanation: "A platform hosting open-source pre-trained ML models and a paid inference API." },
+  { term: "Coeff.", full: "Coefficient", explanation: "The weight a model (e.g., SVM) assigns to a feature; higher magnitude means stronger influence on the prediction." },
+  { term: "Imp.", full: "Importance", explanation: "A Random Forest metric (Gini/entropy reduction) indicating how much a feature contributes to splitting decisions." },
+  { term: "Heuristics", full: "Rule-based scoring", explanation: "Pattern-matching rules (e.g., exclamation density, caps ratio, promo phrases) used as a fallback or blend alongside model scores." },
+];
 
 const PIPELINE_STEPS = [
   {
@@ -33,6 +50,8 @@ const FRAUD_MODELS = [
     summary: "Cloud model for fast fraud scoring with a local fallback.",
     description:
       "Calls the HuggingFace inference API (textattack/roberta-base-SST-2). Uses the positive label score as fraud confidence and flags fake when confidence > 0.7. If the API is unavailable, a fallback heuristic scores keyword hits, exclamation density, and short length.",
+    whyUse:
+      "Fake reviews on Shopee, Lazada, Amazon, and TikTok Shop often use overly positive, templated language that sounds natural but is statistically unusual. RoBERTa was pre-trained on hundreds of millions of real sentences, so it picks up on those unnatural patterns in OCR-extracted review text that a keyword list would miss. The cloud API offloads the heavy computation so the extension stays lightweight, and the heuristic fallback keeps fraud scoring available even when the user has no internet or the API times out.",
   },
   {
     name: "RoBERTa + Heuristics (Local)",
@@ -40,6 +59,8 @@ const FRAUD_MODELS = [
     summary: "Local RoBERTa score blended with review-pattern heuristics.",
     description:
       "Runs a local RoBERTa SST-2 pipeline and treats the negative label score as fraud probability. Blends that with a heuristic score (exclamations, caps ratio, repeated characters, short review, promo phrases). Combined score = 0.7 * model + 0.3 * heuristics; fake if > 0.6.",
+    whyUse:
+      "OCR output from e-commerce review sections often includes formatting noise — extra punctuation, ALL-CAPS lines, and very short entries that are more incentivized filler than genuine feedback. The heuristic layer targets exactly those surface signals (exclamation density, caps ratio, promo phrases like 'highly recommend', suspiciously short length) while RoBERTa handles the deeper linguistic patterns. Running entirely on the local server means there's no API dependency mid-analysis, which matters when the extension is processing dozens of screenshots in one session.",
   },
   {
     name: "Random Forest (TF-IDF)",
@@ -47,6 +68,8 @@ const FRAUD_MODELS = [
     summary: "TF-IDF signals scored by a Random Forest classifier.",
     description:
       "Uses TF-IDF bigrams (max 5,000 features) and a Random Forest classifier. Uses predict_proba for fraud confidence and flags fake when confidence > 0.6. Reports the most influential TF-IDF features per input.",
+    whyUse:
+      "Review text extracted via OCR is messy — broken words, merged lines, inconsistent casing — which makes it a noisy input. Random Forest handles that noise well because many imperfect trees voting together smooth out individual errors. TF-IDF bigrams also capture recurring fake-review phrases ('product as described', '5 stars no reason', 'fast shipping') that appear across platforms. Critically, the model outputs feature importance scores, so the Results page can show users exactly which words flagged the review as suspicious — making the verdict explainable, not just a black-box score.",
   },
 ];
 
@@ -57,6 +80,8 @@ const SENTIMENT_MODELS = [
     summary: "Cloud sentiment model with keyword fallback.",
     description:
       "Calls the HuggingFace inference API (distilbert-base-uncased-finetuned-sst-2-english). Chooses the highest scoring label. If the API is unavailable, a keyword-based fallback returns positive/negative/neutral.",
+    whyUse:
+      "Shoppers reading aggregated review screenshots need a fast, reliable sentiment signal alongside the fraud verdict. DistilBERT's SST-2 fine-tuning means it understands context — a review saying 'not bad at all' is positive, not negative — which matters when OCR merges several short reviews into one blob of text. Its smaller size keeps cloud response times low during the analysis phase, and the keyword fallback ensures a sentiment label is always returned even if the API is unreachable mid-session.",
   },
   {
     name: "RoBERTa Twitter Sentiment",
@@ -64,6 +89,8 @@ const SENTIMENT_MODELS = [
     summary: "Local multi-class sentiment with confidence breakdowns.",
     description:
       "Runs cardiffnlp/twitter-roberta-base-sentiment-latest locally. Returns positive, neutral, or negative with class probabilities. The highest score becomes the sentiment label.",
+    whyUse:
+      "Reviews on Shopee and TikTok Shop in particular are written in a very informal, social-media style — broken grammar, mixed English and local slang, emoji substitutes in punctuation. This model was trained on Twitter data, so that register is familiar to it. The three-class output (positive / neutral / negative) is also more useful here than a binary label: a neutral verdict on a product with mostly fake reviews is a meaningful signal on its own. Running locally means it processes the full OCR payload without any network round-trip.",
   },
   {
     name: "SVM (TF-IDF)",
@@ -71,6 +98,8 @@ const SENTIMENT_MODELS = [
     summary: "Calibrated SVM with interpretable TF-IDF signals.",
     description:
       "Uses TF-IDF n-grams with a calibrated Linear SVM. Predicts positive/negative with probabilities and returns the top contributing features based on TF-IDF weight and model coefficients.",
+    whyUse:
+      "The training data for this app is relatively small (a few thousand labeled reviews), and SVMs are well-suited for that regime — they find the optimal decision boundary without needing the volume that deep learning requires. Calibrated probabilities ensure the confidence percentage shown in the Results page is honest rather than arbitrarily high. The top TF-IDF coefficient features are also surfaced in the model breakdown, so a user can see, for example, that words like 'packaging' or 'delivery' were the strongest positive signals — grounding the sentiment verdict in the actual review words.",
   },
 ];
 
@@ -85,7 +114,7 @@ function SectionHeader({ title, description }) {
   );
 }
 
-function ModelCard({ name, tags, summary, description }) {
+function ModelCard({ name, tags, summary, description, whyUse }) {
   return (
     <Card className="h-full">
       <CardContent className="p-4">
@@ -105,7 +134,15 @@ function ModelCard({ name, tags, summary, description }) {
               <span className="hidden group-open/model:inline">Hide details</span>
             </span>
           </summary>
-          <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
+          <div className="space-y-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
+            {whyUse && (
+              <div className="rounded-md bg-muted/40 px-3 py-2">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-foreground/60">Why this model?</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{whyUse}</p>
+              </div>
+            )}
+          </div>
         </details>
       </CardContent>
     </Card>
@@ -127,13 +164,6 @@ export function AboutPage() {
           with OCR, and runs multiple fraud and sentiment models to deliver a clear,
           explainable verdict for shoppers and analysts.
         </p>
-        <div className="flex flex-wrap gap-2">
-          {PLATFORMS.map((platform) => (
-            <Badge key={platform} variant="secondary" className="text-[10px]">
-              {platform}
-            </Badge>
-          ))}
-        </div>
       </div>
 
       <Card>
@@ -224,6 +254,23 @@ export function AboutPage() {
                 label across the three sentiment models, plus an averaged confidence score.
               </p>
             </div>
+            <div className="mt-3 rounded-md bg-muted/40 px-3 py-3 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/60">Why heuristics too?</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                ML models are powerful but opaque — they can silently fail on OCR noise, very short reviews, or out-of-distribution text without returning a useful signal. Heuristics serve two distinct roles here:
+              </p>
+              <ul className="grid gap-1.5 text-xs leading-relaxed text-muted-foreground list-disc pl-4">
+                <li>
+                  <span className="font-medium text-foreground">Blend (RoBERTa Local):</span> the heuristic score is mixed in at 30% weight alongside the model's 70%. Fake reviews on Shopee and TikTok frequently use surface patterns — excessive exclamation marks, all-caps lines, promo phrases, suspiciously short text — that a sentiment-trained transformer won't treat as suspicious on its own. The heuristic layer adds those structural signals back in, making the combined score more sensitive to the kind of incentivized reviews common on Southeast Asian platforms.
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">Fallback (HF API):</span> when the HuggingFace API is unreachable or times out mid-session, the heuristic runs instead so the fraud verdict is never blank. A degraded-but-present result is more useful to a shopper than an error state.
+                </li>
+              </ul>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                In both cases the heuristic is not the primary decision-maker — it either anchors the model or substitutes for it when the model is unavailable. This keeps the system resilient without over-relying on hand-written rules.
+              </p>
+            </div>
           </details>
 
           <details className="group rounded-lg border bg-background p-4">
@@ -245,6 +292,31 @@ export function AboutPage() {
               <li>Models are tuned for English and may degrade on mixed languages.</li>
               <li>Evaluation metrics only reflect the quality of labeled samples provided.</li>
             </ul>
+          </details>
+          <details className="group rounded-lg border bg-background p-4">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-foreground">
+              <span>Glossary / Abbreviations</span>
+              <span className="text-xs font-normal text-primary/70">
+                <span className="group-open:hidden">Expand glossary</span>
+                <span className="hidden group-open:inline">Hide glossary</span>
+              </span>
+            </summary>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Abbreviations and technical terms used throughout the app.
+            </p>
+            <div className="mt-3 grid gap-2">
+              {GLOSSARY.map((entry) => (
+                <div key={entry.term} className="rounded-lg border bg-muted/30 p-3">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-sm font-semibold text-foreground">{entry.term}</span>
+                    {entry.full !== entry.term && (
+                      <span className="text-xs text-muted-foreground">— {entry.full}</span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{entry.explanation}</p>
+                </div>
+              ))}
+            </div>
           </details>
         </CardContent>
       </Card>

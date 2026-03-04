@@ -18,10 +18,6 @@ import {
   CameraIcon,
   StopIcon,
   SpinnerIcon,
-  ShopeeIcon,
-  LazadaIcon,
-  AmazonIcon,
-  TikTokIcon,
   SettingsIcon,
   ChevronDownIcon,
 } from "@/components/ui/icons";
@@ -42,40 +38,6 @@ const FullscreenLoader = () => (
   </div>
 );
 
-const PLATFORMS = [
-  {
-    id: "shopee",
-    name: "Shopee",
-    color: "text-orange-600 dark:text-orange-400",
-    bgColor: "bg-orange-500/10",
-    borderActive: "border-orange-500",
-    icon: <ShopeeIcon />,
-  },
-  {
-    id: "lazada",
-    name: "Lazada",
-    color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-500/10",
-    borderActive: "border-blue-500",
-    icon: <LazadaIcon />,
-  },
-  {
-    id: "amazon",
-    name: "Amazon",
-    color: "text-yellow-600 dark:text-yellow-400",
-    bgColor: "bg-yellow-500/10",
-    borderActive: "border-yellow-500",
-    icon: <AmazonIcon />,
-  },
-  {
-    id: "tiktok",
-    name: "TikTok Shop",
-    color: "text-pink-600 dark:text-pink-400",
-    bgColor: "bg-pink-500/10",
-    borderActive: "border-pink-500",
-    icon: <TikTokIcon />,
-  },
-];
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -126,7 +88,6 @@ export function HomePage() {
     isSupportedPage,
     isOnSupportedDomain,
     currentTabUrl,
-    currentPlatform,
     disabledModels,
     toggleModel,
   } = useAnalysisContext();
@@ -328,36 +289,6 @@ export function HomePage() {
           <p className="text-xs text-muted-foreground">Detect fake reviews with ML</p>
         </div>
       </header>
-
-      {/* Platform grid */}
-      <div className="grid w-full max-w-lg grid-cols-2 gap-2">
-        {PLATFORMS.map((platform) => {
-          const isActive = currentPlatform === platform.id;
-          return (
-            <div
-              key={platform.id}
-              className={cn(
-                "relative flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
-                isActive
-                  ? `${platform.borderActive} ${platform.bgColor}`
-                  : "border-border bg-card"
-              )}
-            >
-              <span className={cn("shrink-0", isActive ? platform.color : "text-muted-foreground")}>
-                {platform.icon}
-              </span>
-              <span className={cn("text-sm font-medium", isActive ? platform.color : "text-foreground")}>
-                {platform.name}
-              </span>
-              {isActive && (
-                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
-                  Active
-                </Badge>
-              )}
-            </div>
-          );
-        })}
-      </div>
 
       {/* Model configuration (only visible when idle) */}
       {!isBusy && !showPageSelector && !pausedOcrText && (
