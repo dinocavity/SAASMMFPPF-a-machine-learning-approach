@@ -100,6 +100,7 @@ let allScreenshots = [];
 let pendingContinue = null;
 let analyzeAfterCurrentPage = false;
 let isCapturingPage = false;
+let captureReviewTopOffset = 0;
 let pageScreenshotCounts = [];
 let firstCaptureTimeoutId = null;
 let totalPagesForUi = null;
@@ -260,6 +261,115 @@ function sendAnalysisError(message) {
   chrome.runtime.sendMessage({ action: "analysisError", message });
 }
 
+function getStickyHeaderHeight() {
+  // Measure the total height of sticky/fixed headers near the top of the viewport
+  let maxBottom = 0;
+  const candidates = document.querySelectorAll('header,nav,[class*="header"],[class*="navbar"],[class*="topbar"],[class*="sticky"]');
+  for (const el of candidates) {
+    const style = window.getComputedStyle(el);
+    if (style.position !== 'fixed' && style.position !== 'sticky') continue;
+    const rect = el.getBoundingClientRect();
+    // Only count elements pinned near the top (within top 200px)
+    if (rect.top >= 0 && rect.top < 200 && rect.bottom > maxBottom) {
+      maxBottom = rect.bottom;
+    }
+  }
+  return Math.round(maxBottom);
+}
+
+function getFirstReviewItemTop() {
+  // Find the first actual review item element to know where review text starts
+  const itemSelectors = [
+    '.shopee-product-rating',
+    '[data-sqe="rating-item"]',
+    '[class*="review-item"]',
+    '[data-hook="review"]',
+    '[data-e2e="review-item"]',
+    '.item-review',
+    '[class*="ReviewItem"]',
+    '[class*="review_item"]',
+  ];
+  for (const sel of itemSelectors) {
+    const first = document.querySelector(sel);
+    if (first) {
+      const top = Math.round(first.getBoundingClientRect().top);
+      // Clamp: must be within the viewport and leave at least 100px of content
+      return Math.max(0, Math.min(top, window.innerHeight - 100));
+    }
+  }
+  // Fallback: use sticky header height so we at least skip the nav bar
+  const headerHeight = getStickyHeaderHeight();
+  return headerHeight > 0 ? headerHeight : 0;
+}
+
+function findReviewSectionBottom() {
+  // Try known review container selectors across all platforms
+  const containerSelectors = [
+    '#product_ratings',
+    '[data-sqe="rating_section"]',
+    '[id*="product_ratings"]',
+    '#customer-reviews',
+    '#cm_cr-review_list',
+    '[data-e2e="product-review"]',
+    '.product-review',
+    '[class*="review-list"]',
+    '[class*="reviews-container"]',
+    '[class*="rating-list"]',
+  ];
+  for (const sel of containerSelectors) {
+    const el = document.querySelector(sel);
+    if (el) {
+      return window.scrollY + el.getBoundingClientRect().bottom;
+    }
+  }
+  // Fallback: find the lowest visible review item
+  const itemSelectors = [
+    '.shopee-product-rating', '[data-hook="review"]',
+    '[class*="review-item"]', '.item-review',
+  ];
+  let lowestBottom = 0;
+  for (const sel of itemSelectors) {
+    const items = document.querySelectorAll(sel);
+    if (items.length > 0) {
+      const last = items[items.length - 1];
+      lowestBottom = Math.max(lowestBottom, window.scrollY + last.getBoundingClientRect().bottom);
+    }
+  }
+  return lowestBottom || null;
+}
+
+function hasRecommendationContent() {
+  const keywords = [
+    'you may also like', 'you might also like', 'similar products',
+    'customers also bought', 'related products', 'also viewed',
+    'recommended for you', 'more from this shop',
+  ];
+  // Check headings and prominent elements near the top half of the viewport
+  const candidates = document.querySelectorAll('h1,h2,h3,h4,[class*="title"],[class*="heading"],[class*="section"]');
+  for (const el of candidates) {
+    const rect = el.getBoundingClientRect();
+    if (rect.top >= 0 && rect.top < window.innerHeight * 0.6) {
+      const text = (el.textContent || '').toLowerCase().trim();
+      if (keywords.some(kw => text.includes(kw)) && text.length < 80) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function detectNoReviews(anchor) {
+  const el = anchor || document.body;
+  const text = (el.textContent || '').toLowerCase();
+  const noReviewPhrases = [
+    'no reviews yet', 'no ratings yet', 'no customer reviews',
+    'be the first to review', 'be the first to rate',
+    'no reviews found', '0 ratings', '0 reviews',
+    "haven't received any reviews", 'no review yet',
+  ];
+  return noReviewPhrases.some(phrase => text.includes(phrase));
+}
+
 function startFlow() {
   if (isRunning) {
     console.log('Flow already running, skipping');
@@ -312,6 +422,13 @@ function startAutoAnalyze(pagination) {
     ratingsAnchor = document.body;
   }
 
+  if (detectNoReviews(ratingsAnchor)) {
+    sendAnalysisError("No reviews found on this page.");
+    chrome.runtime.sendMessage({ action: "analysisStopped" });
+    isRunning = false;
+    return;
+  }
+
   scrollRatingsToTop();
   chrome.runtime.sendMessage({ action: "analysisScrolling" });
   // Kick off initial progress so UI knows capture is starting
@@ -333,7 +450,10 @@ function startAutoAnalyze(pagination) {
       isRunning = false;
     }
   }, 8000);
-  setTimeout(() => captureReviewScreenshots(handlePageCaptured), 2000);
+  setTimeout(() => {
+    captureReviewTopOffset = getFirstReviewItemTop();
+    captureReviewScreenshots(handlePageCaptured);
+  }, 1000);
 }
 
 function cacheRatingsAnchor() {
@@ -353,7 +473,7 @@ function cacheRatingsAnchor() {
     // TikTok Shop review selectors
     "[data-e2e='product-review']",
     "[class*='ReviewList']",
-    "[class*='review-list']",
+    "[class*='review-list']",
     "[class*='review-filter-container']",
     "[class*='review-filter']",
   ];
@@ -512,12 +632,28 @@ function handlePage(page) {
 }
 
 function captureReviewScreenshots(onComplete) {
-  const maxShots = 8;
+  const maxShots = 6;
   const step = Math.max(window.innerHeight - 150, 500);
   const docHeight = document.documentElement.scrollHeight;
   const startY = window.scrollY;
   const screenshots = [];
   isCapturingPage = true;
+
+  const finishCapture = () => {
+    isCapturingPage = false;
+    if (typeof onComplete === "function") {
+      onComplete(screenshots);
+    } else {
+      chrome.runtime.sendMessage({
+        action: "analysisScreenshots",
+        screenshots,
+        reviewTopOffset: captureReviewTopOffset,
+      });
+      captureReviewTopOffset = 0;
+      window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+      isRunning = false;
+    }
+  };
 
   const captureAt = (index, y) => {
     if (stopRequested) {
@@ -535,6 +671,12 @@ function captureReviewScreenshots(onComplete) {
         chrome.runtime.sendMessage({ action: "analysisStopped" });
         window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
         isRunning = false;
+        return;
+      }
+
+      // Stop if recommendation/carousel section has entered the viewport
+      if (screenshots.length > 0 && hasRecommendationContent()) {
+        finishCapture();
         return;
       }
       try {
@@ -582,17 +724,7 @@ function captureReviewScreenshots(onComplete) {
         if (index + 1 < maxShots && nextY < docHeight - 50) {
           captureAt(index + 1, nextY);
         } else {
-          isCapturingPage = false;
-          if (typeof onComplete === "function") {
-            onComplete(screenshots);
-          } else {
-            chrome.runtime.sendMessage({
-              action: "analysisScreenshots",
-              screenshots
-            });
-            window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
-            isRunning = false;
-          }
+          finishCapture();
         }
         });
       } catch (err) {
@@ -601,7 +733,7 @@ function captureReviewScreenshots(onComplete) {
         window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
         isRunning = false;
       }
-    }, 800);
+    }, 600);
   };
 
   captureAt(0, startY);
@@ -624,7 +756,9 @@ function handlePageCaptured(screenshots) {
       screenshots: allScreenshots,
       pagesCaptured: currentPageIndex,
       pageScreenshotCounts,
+      reviewTopOffset: captureReviewTopOffset,
     });
+    captureReviewTopOffset = 0;
     window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
     isRunning = false;
     return;
@@ -637,7 +771,9 @@ function handlePageCaptured(screenshots) {
       screenshots: allScreenshots,
       pagesCaptured: currentPageIndex,
       pageScreenshotCounts,
+      reviewTopOffset: captureReviewTopOffset,
     });
+    captureReviewTopOffset = 0;
     window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
     isRunning = false;
     return;
@@ -680,7 +816,9 @@ function analyzeNow() {
       screenshots,
       pagesCaptured: currentPageIndex,
       pageScreenshotCounts,
+      reviewTopOffset: captureReviewTopOffset,
     });
+    captureReviewTopOffset = 0;
     window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
     isRunning = false;
     return;
@@ -694,7 +832,9 @@ function analyzeNow() {
       screenshots,
       pagesCaptured: currentPageIndex,
       pageScreenshotCounts,
+      reviewTopOffset: captureReviewTopOffset,
     });
+    captureReviewTopOffset = 0;
     window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
     isRunning = false;
   }
@@ -719,7 +859,9 @@ function proceedToNextPage() {
       screenshots: allScreenshots,
       pagesCaptured: currentPageIndex,
       pageScreenshotCounts,
+      reviewTopOffset: captureReviewTopOffset,
     });
+    captureReviewTopOffset = 0;
     window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
     isRunning = false;
     return;
@@ -737,7 +879,9 @@ function proceedToNextPage() {
         screenshots: allScreenshots,
         pagesCaptured: currentPageIndex,
         pageScreenshotCounts,
+        reviewTopOffset: captureReviewTopOffset,
       });
+      captureReviewTopOffset = 0;
       window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
       isRunning = false;
       return;

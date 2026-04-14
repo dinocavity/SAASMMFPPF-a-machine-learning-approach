@@ -10,6 +10,106 @@ import { ACTION_TYPES, PHASES, FRAUD_MODEL_IDS, SENTIMENT_MODEL_IDS } from "@/li
 
 const DISABLED_MODELS_KEY = "saasmmfppf_disabled_models";
 
+// Known UI section headers that signal we've left the review area
+const RECOMMENDATION_PATTERNS = [
+  /you may also like/i, /you might also like/i, /similar products/i,
+  /customers also bought/i, /related products/i, /also viewed/i,
+  /recommended for you/i, /more from this shop/i, /more products/i,
+];
+
+function cleanOcrText(text) {
+  // Step 1: cut at any recommendation/carousel section header
+  const lines = text.split('\n');
+  let cutIndex = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    const lower = lines[i].toLowerCase().trim();
+    if (RECOMMENDATION_PATTERNS.some(p => p.test(lower))) {
+      cutIndex = i;
+      break;
+    }
+  }
+  const trimmedLines = lines.slice(0, cutIndex);
+
+  // Step 2: clean within each line, then decide whether to keep it
+  return trimmedLines
+    .map(line =>
+      line
+        .replace(/\s*\|\s*/g, ' ')   // pipe separators → space
+        .replace(/[_=]{2,}/g, ' ')   // repeated underscores/equals → space
+        .replace(/\s{2,}/g, ' ')     // collapse whitespace
+        .trim()
+    )
+    .filter(line => {
+      const t = line;
+      if (!t) return true;
+
+      // ── length guard ────────────────────────────────────────────────────
+      if (t.length < 3) return false;
+
+      // ── star / rating lines ──────────────────────────────────────────────
+      if (/^[★☆⭐✩✭✪✫✬\s]+$/.test(t)) return false;
+      if (/^\d+(\.\d+)?\s*(\/\s*\d+|out of\s+\d+|stars?|[★☆⭐✩✭✪✫✬\s]*)?\s*$/i.test(t)) return false;
+
+      // ── price lines ──────────────────────────────────────────────────────
+      if (/^[₱$€£¥]\s*[\d,]+/.test(t)) return false;
+      if (/^[so0]?\d{3,}\s*$/.test(t)) return false;   // "0220", "s219" (OCR ₱ misread)
+
+      // ── structural noise ─────────────────────────────────────────────────
+      if ((t.match(/\|/g) || []).length >= 2) return false;    // product listing rows
+      if (/[»«→←↑↓►◄▶◀]/.test(t)) return false;               // navigation arrows
+      if (/^[&\[#]/.test(t)) return false;                     // lines starting with UI markers
+
+      // ── high special-char ratio ──────────────────────────────────────────
+      const alphaCount = (t.match(/[a-zA-Z0-9\u00C0-\u024F]/g) || []).length;
+      if (t.length >= 4 && alphaCount / t.length < 0.4) return false;  // catches "\ £5", "_ [", etc.
+
+      // ── no-vowel short alpha strings (OCR-misread star ratings) ──────────
+      // e.g. "dhkkk", "kAKkk" — consonant-only sequences up to 8 chars
+      const noSpace = t.replace(/\s/g, '');
+      if (
+        noSpace.length >= 3 && noSpace.length <= 8 &&
+        /^[a-zA-Z]+$/.test(noSpace) &&
+        !/[aeiouAEIOU]/.test(noSpace)
+      ) return false;
+
+      // ── mixed-case OCR artifacts (e.g. "HhRAR", "AsSEe") ────────────────
+      // Short strings where letters alternate or clump in suspicious case patterns
+      if (/^[A-Z][a-z][A-Z]{2,4}$/.test(noSpace)) return false;
+
+      // ── symbol-prefixed garbage (e.g. "*kkkh", "-xyz") ───────────────────
+      if (/^[^a-zA-Z0-9\s]{1,2}[a-zA-Z]{3,6}$/.test(t)) return false;
+
+      // ── username/ID patterns unlikely to be review text ──────────────────
+      if (/^[a-z]{2,6}\d{3,7}$/.test(t)) return false;    // "mae12123", "abc9999"
+      if (/^\d{2,}[a-zA-Z]{1,2}$/.test(t)) return false;  // "900d", "12px"
+
+      // ── standalone bracket lines ─────────────────────────────────────────
+      if (/\s[\[\]]\s|\s[\[\]]$|^[\[\]]\s/.test(t)) return false;
+
+      // ── most tokens are very short (garbled OCR fragments) ───────────────
+      // "mE ee So" / "os JE) )" / "Sm? To WIE FM"
+      const tokens = t.split(/\s+/).filter(Boolean);
+      if (tokens.length >= 3) {
+        const shortCount = tokens.filter(tok => tok.replace(/[^a-zA-Z0-9]/g, '').length <= 2).length;
+        if (shortCount / tokens.length >= 0.6) return false;
+      }
+
+      // ── filter UI / navigation text ──────────────────────────────────────
+      if (/with (comments?|media|images?|videos?)\s*\(\d+\)/i.test(t)) return false;  // anywhere in line
+      if (/^(sort by|filter|newest|most helpful|top reviews?|all reviews?)$/i.test(t)) return false;
+
+      // ── product carousel rows (same word repeated ≥ 3×) ─────────────────
+      if (tokens.length >= 6) {
+        const wc = {};
+        for (const w of tokens) wc[w.toLowerCase()] = (wc[w.toLowerCase()] || 0) + 1;
+        if (Object.values(wc).some(c => c >= 3)) return false;
+      }
+
+      return true;
+    })
+    .join('\n');
+}
+
 function loadDisabledModels() {
   try {
     const raw = localStorage.getItem(DISABLED_MODELS_KEY);
@@ -30,6 +130,7 @@ export function useAnalysis() {
   const platformState = usePlatformDetection();
 
   const [results, setResults] = useState(null);
+  const [ocrText, setOcrText] = useState(null);
   const [resultsSaved, setResultsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -80,6 +181,7 @@ export function useAnalysis() {
 
   const reset = useCallback(() => {
     setResults(null);
+    setOcrText(null);
     setLoading(false);
     setError("");
     setResultsSaved(false);
@@ -172,6 +274,7 @@ export function useAnalysis() {
           captureState.scrollTimeoutRef.current = null;
         }
         const shots = message.screenshots || [];
+        const reviewTopOffset = message.reviewTopOffset || 0;
         if (!shots.length) {
           captureState.setAutoFlowStatus("No screenshots captured.");
           captureState.setAutoFlowActive(false);
@@ -194,7 +297,7 @@ export function useAnalysis() {
         } else if (shots.length) {
           captureState.setPageScreenshotCounts([shots.length]);
         }
-        runOcrFlow(shots);
+        runOcrFlow(shots, { reviewTopOffset });
       }
 
       if (message.action === ACTION_TYPES.ANALYSIS_PAGE_COMPLETE) {
@@ -356,7 +459,7 @@ export function useAnalysis() {
   const analyzeText = useCallback(
     async (text) => {
       if (!text?.trim()) {
-        setError("No review text found.");
+        setError("No review text could be extracted. The page may have no reviews, or they may be in an unsupported language.");
         return null;
       }
 
@@ -393,7 +496,7 @@ export function useAnalysis() {
 
   const runOcrFlow = useCallback(
     async (screenshots, options = {}) => {
-      const { prefixText = "" } = options;
+      const { prefixText = "", reviewTopOffset = 0 } = options;
       const totalScreenshots = options.totalScreenshots ?? screenshots.length;
       const completedScreenshots = options.completedScreenshots ?? 0;
       try {
@@ -411,15 +514,24 @@ export function useAnalysis() {
             phaseState.setPhaseProgress(clamped);
             phaseState.setPhaseDetail(`Processing image ${completedScreenshots + imageIndex} of ${totalScreenshots}`);
           }
-        });
+        }, reviewTopOffset);
 
         const text = result?.text || "";
         const stoppedEarly = result?.stoppedEarly;
         const nextIndex = typeof result?.nextIndex === "number" ? result.nextIndex : screenshots.length;
         const nextCompleted = completedScreenshots + nextIndex;
-        const combinedText = prefixText && text
+        const averageConfidence = result?.averageConfidence ?? null;
+
+        if (averageConfidence !== null && averageConfidence < 40) {
+          toast.info(
+            "Low OCR confidence — reviews may be in a language not fully supported. Results may be incomplete."
+          );
+        }
+
+        const rawText = prefixText && text
           ? `${prefixText}\n\n${text}`
           : prefixText || text;
+        const combinedText = cleanOcrText(rawText);
 
         if (captureState.cancelRef.current || !combinedText) {
           if (ocrState.ocrTerminatedRef.current) {
@@ -447,6 +559,7 @@ export function useAnalysis() {
           capturedTextPreview: combinedText.slice(0, 200),
           productName: productNameRef.current,
         });
+        setOcrText(combinedText);
 
         if (ocrState.ocrPauseRequestedRef.current) {
           ocrState.ocrPauseRequestedRef.current = false;
@@ -700,6 +813,7 @@ export function useAnalysis() {
 
   return {
     results,
+    ocrText,
     loading,
     error,
     autoFlowActive: captureState.autoFlowActive,

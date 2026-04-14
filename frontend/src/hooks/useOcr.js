@@ -2,6 +2,23 @@ import { useState, useCallback, useRef } from "react";
 import Tesseract from "tesseract.js";
 import { TESSERACT_CONFIG } from "@/lib/constants";
 
+async function preprocessImage(dataUrl, cropY = 0, scale = 0.75) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const srcHeight = img.height - cropY;
+      if (srcHeight <= 0) { resolve(dataUrl); return; }
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(srcHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, cropY, img.width, srcHeight, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    };
+    img.src = dataUrl;
+  });
+}
+
 export function useOcr() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -10,7 +27,7 @@ export function useOcr() {
   const stopAfterCurrentRef = useRef(false);
   const stoppedEarlyRef = useRef(false);
 
-  const processScreenshots = useCallback(async (screenshots, onProgress) => {
+  const processScreenshots = useCallback(async (screenshots, onProgress, firstCropY = 0) => {
     setLoading(true);
     setError("");
     setProgress(0);
@@ -19,6 +36,7 @@ export function useOcr() {
     stoppedEarlyRef.current = false;
 
     const extractedBlocks = [];
+    const confidenceScores = [];
     let lastIndex = -1;
 
     try {
@@ -27,7 +45,10 @@ export function useOcr() {
           throw new Error("OCR cancelled");
         }
 
-        const result = await Tesseract.recognize(screenshots[index], "eng", {
+        const cropY = index === 0 ? firstCropY : 0;
+        const processedImage = await preprocessImage(screenshots[index], cropY, 0.75);
+
+        const result = await Tesseract.recognize(processedImage, "eng", {
           logger: (message) => {
             if (cancelRef.current) return;
             if (message.status === "recognizing text") {
@@ -47,6 +68,9 @@ export function useOcr() {
         });
 
         extractedBlocks.push(result.data.text.trim());
+        if (result.data.confidence > 0) {
+          confidenceScores.push(result.data.confidence);
+        }
         lastIndex = index;
 
         if (stopAfterCurrentRef.current) {
@@ -57,7 +81,10 @@ export function useOcr() {
 
       const combined = extractedBlocks.filter(Boolean).join("\n\n");
       const nextIndex = stoppedEarlyRef.current ? lastIndex + 1 : screenshots.length;
-      return { text: combined, stoppedEarly: stoppedEarlyRef.current, nextIndex };
+      const averageConfidence = confidenceScores.length
+        ? Math.round(confidenceScores.reduce((s, v) => s + v, 0) / confidenceScores.length)
+        : null;
+      return { text: combined, stoppedEarly: stoppedEarlyRef.current, nextIndex, averageConfidence };
     } catch (err) {
       if (err.message === "OCR cancelled") {
         setError("OCR was cancelled");

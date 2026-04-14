@@ -1,6 +1,7 @@
 import { FraudModelRow, SentimentModelRow } from "./ModelRow";
 import { AverageCard } from "./AverageCard";
 import { DataOverview } from "./DataOverview";
+import { ProcessedTextPanel } from "./ProcessedTextPanel";
 
 function SectionHeading({ children }) {
   return (
@@ -12,7 +13,7 @@ function SectionHeading({ children }) {
   );
 }
 
-export function ResultsDetails({ results, captureMetadata }) {
+export function ResultsDetails({ results, captureMetadata, ocrText, ocrTextTruncated, ocrTextFullLength }) {
   if (!results) return null;
 
   const { fraud, sentiment, text_metadata } = results;
@@ -64,6 +65,12 @@ export function ResultsDetails({ results, captureMetadata }) {
           </div>
         </div>
       </div>
+
+      <ProcessedTextPanel
+        ocrText={ocrText}
+        ocrTextTruncated={ocrTextTruncated}
+        ocrTextFullLength={ocrTextFullLength}
+      />
     </div>
   );
 }

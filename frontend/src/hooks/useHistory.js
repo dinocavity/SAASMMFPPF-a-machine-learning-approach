@@ -60,6 +60,9 @@ export function useHistory() {
       disabledModels: entry.disabledModels || [],
       fraudVerdict: extractFraudVerdict(entry.results),
       sentimentVerdict: extractSentimentVerdict(entry.results),
+      ocrText: entry.ocrText ? entry.ocrText.slice(0, 5000) : null,
+      ocrTextTruncated: entry.ocrText ? entry.ocrText.length > 5000 : false,
+      ocrTextFullLength: entry.ocrText ? entry.ocrText.length : null,
     };
 
     setHistory((prev) => [newEntry, ...prev].slice(0, MAX_ENTRIES));
