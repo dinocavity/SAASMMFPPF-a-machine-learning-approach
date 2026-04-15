@@ -15,23 +15,32 @@ const RECOMMENDATION_PATTERNS = [
   /you may also like/i, /you might also like/i, /similar products/i,
   /customers also bought/i, /related products/i, /also viewed/i,
   /recommended for you/i, /more from this shop/i, /more products/i,
+  /from the same shop/i, /from the same seller/i,
+  /you may also need/i, /similar items/i,
 ];
 
 function cleanOcrText(text) {
-  // Step 1: cut at any recommendation/carousel section header
-  const lines = text.split('\n');
-  let cutIndex = lines.length;
-  for (let i = 0; i < lines.length; i++) {
-    const lower = lines[i].toLowerCase().trim();
-    if (RECOMMENDATION_PATTERNS.some(p => p.test(lower))) {
-      cutIndex = i;
-      break;
+  // Step 1: cut at recommendation/carousel section headers — applied PER screenshot
+  // block (blocks are separated by "\n\n" as joined in useOcr.js) so that a
+  // recommendation section at the bottom of one page's last screenshot doesn't
+  // discard all text from subsequent review pages.
+  const blocks = text.split('\n\n');
+  const allLines = [];
+  for (const block of blocks) {
+    const blockLines = block.split('\n');
+    let cutIndex = blockLines.length;
+    for (let i = 0; i < blockLines.length; i++) {
+      const lower = blockLines[i].toLowerCase().trim();
+      if (RECOMMENDATION_PATTERNS.some(p => p.test(lower))) {
+        cutIndex = i;
+        break;
+      }
     }
+    allLines.push(...blockLines.slice(0, cutIndex));
   }
-  const trimmedLines = lines.slice(0, cutIndex);
 
   // Step 2: clean within each line, then decide whether to keep it
-  return trimmedLines
+  return allLines
     .map(line =>
       line
         .replace(/\s*\|\s*/g, ' ')   // pipe separators → space
@@ -88,15 +97,23 @@ function cleanOcrText(text) {
 
       // ── most tokens are very short (garbled OCR fragments) ───────────────
       // "mE ee So" / "os JE) )" / "Sm? To WIE FM"
+      // Only applied to lines with 5+ tokens at a 70% threshold to avoid
+      // removing legitimate short-word reviews like "It is ok" or "It is good".
       const tokens = t.split(/\s+/).filter(Boolean);
-      if (tokens.length >= 3) {
+      if (tokens.length >= 5) {
         const shortCount = tokens.filter(tok => tok.replace(/[^a-zA-Z0-9]/g, '').length <= 2).length;
-        if (shortCount / tokens.length >= 0.6) return false;
+        if (shortCount / tokens.length >= 0.7) return false;
       }
 
       // ── filter UI / navigation text ──────────────────────────────────────
       if (/with (comments?|media|images?|videos?)\s*\(\d+\)/i.test(t)) return false;  // anywhere in line
       if (/^(sort by|filter|newest|most helpful|top reviews?|all reviews?)$/i.test(t)) return false;
+      if (((t.match(/\(\d+\)/g) || []).length) >= 2) return false;  // filter tab rows: "All (69) With Images (119)"
+
+      // ── e-commerce footer / download-app lines ───────────────────────────
+      if (/\bshopee\s*(app|pay|coins?|careers?|mall|log)\b/i.test(t)) return false;
+      if (/\b(customer\s*service|about\s*shopee|follow\s*us|payment\s*methods?|download)\b/i.test(t)) return false;
+      if (/\b(visa|mastercard|gcash|maya|cod)\b.*\b(visa|mastercard|gcash|maya|cod)\b/i.test(t)) return false;
 
       // ── product carousel rows (same word repeated ≥ 3×) ─────────────────
       if (tokens.length >= 6) {

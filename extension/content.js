@@ -278,28 +278,9 @@ function getStickyHeaderHeight() {
 }
 
 function getFirstReviewItemTop() {
-  // Find the first actual review item element to know where review text starts
-  const itemSelectors = [
-    '.shopee-product-rating',
-    '[data-sqe="rating-item"]',
-    '[class*="review-item"]',
-    '[data-hook="review"]',
-    '[data-e2e="review-item"]',
-    '.item-review',
-    '[class*="ReviewItem"]',
-    '[class*="review_item"]',
-  ];
-  for (const sel of itemSelectors) {
-    const first = document.querySelector(sel);
-    if (first) {
-      const top = Math.round(first.getBoundingClientRect().top);
-      // Clamp: must be within the viewport and leave at least 100px of content
-      return Math.max(0, Math.min(top, window.innerHeight - 100));
-    }
-  }
-  // Fallback: use sticky header height so we at least skip the nav bar
-  const headerHeight = getStickyHeaderHeight();
-  return headerHeight > 0 ? headerHeight : 0;
+  // Only remove the fixed/sticky navigation bar — never crop into the review list itself.
+  // Using review item selectors was over-cropping and causing the first review to be lost.
+  return getStickyHeaderHeight();
 }
 
 function findReviewSectionBottom() {
@@ -342,7 +323,9 @@ function hasRecommendationContent() {
   const keywords = [
     'you may also like', 'you might also like', 'similar products',
     'customers also bought', 'related products', 'also viewed',
-    'recommended for you', 'more from this shop',
+    'recommended for you', 'more from this shop', 'more products',
+    'from the same shop', 'from the same seller',
+    'similar items', 'you may also need',
   ];
   // Check headings and prominent elements near the top half of the viewport
   const candidates = document.querySelectorAll('h1,h2,h3,h4,[class*="title"],[class*="heading"],[class*="section"]');
