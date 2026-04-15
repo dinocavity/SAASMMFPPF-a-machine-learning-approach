@@ -90,6 +90,7 @@ export function HomePage() {
     currentTabUrl,
     disabledModels,
     toggleModel,
+    ocrText,
   } = useAnalysisContext();
 
   const { addEntry, getEntryByUrl } = useHistoryContext();
@@ -118,6 +119,7 @@ export function HomePage() {
         results,
         captureMetadata,
         disabledModels,
+        ocrText,
       });
       setResultsSaved(true);
       setShowResultsLoader(true);
@@ -136,7 +138,7 @@ export function HomePage() {
         resultsTimerRef.current = null;
       }
     }
-  }, [results, loading, autoFlowActive, navigate, addEntry, pageUrl, productName, captureMetadata, resultsSaved, setResultsSaved, disabledModels]);
+  }, [results, loading, autoFlowActive, navigate, addEntry, pageUrl, productName, captureMetadata, resultsSaved, setResultsSaved, disabledModels, ocrText]);
 
   useEffect(() => {
     return () => {
