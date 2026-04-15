@@ -13,7 +13,7 @@ function SectionHeading({ children }) {
   );
 }
 
-export function ResultsDetails({ results, captureMetadata, ocrText, ocrTextTruncated, ocrTextFullLength }) {
+export function ResultsDetails({ results, captureMetadata, ocrText, annotatedOcrLines, ocrTextTruncated, ocrTextFullLength }) {
   if (!results) return null;
 
   const { fraud, sentiment, text_metadata } = results;
@@ -68,6 +68,7 @@ export function ResultsDetails({ results, captureMetadata, ocrText, ocrTextTrunc
 
       <ProcessedTextPanel
         ocrText={ocrText}
+        annotatedOcrLines={annotatedOcrLines}
         ocrTextTruncated={ocrTextTruncated}
         ocrTextFullLength={ocrTextFullLength}
       />
