@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 
 export function ResultsDetailsPage() {
-  const { results: liveResults, captureMetadata: liveMeta } = useAnalysisContext();
+  const { results: liveResults, captureMetadata: liveMeta, ocrText: liveOcrText, annotatedOcrLines: liveAnnotatedLines } = useAnalysisContext();
   const { getEntryById } = useHistoryContext();
   const [searchParams] = useSearchParams();
 
@@ -16,6 +16,11 @@ export function ResultsDetailsPage() {
   const isHistoryView = !!historyEntry;
   const results = isHistoryView ? historyEntry.results : liveResults;
   const captureMetadata = isHistoryView ? historyEntry.captureMetadata : liveMeta;
+  const ocrText = isHistoryView ? historyEntry?.ocrText : liveOcrText;
+  const ocrTextTruncated = isHistoryView ? historyEntry?.ocrTextTruncated ?? false : false;
+  const ocrTextFullLength = isHistoryView ? historyEntry?.ocrTextFullLength ?? null : null;
+  // Annotated lines only available for live results; history stores plain text only
+  const annotatedOcrLines = isHistoryView ? null : liveAnnotatedLines;
 
   const backTo = isHistoryView
     ? `/results?historyId=${historyId}`
@@ -47,7 +52,14 @@ export function ResultsDetailsPage() {
         </Link>
       </Button>
 
-      <ResultsDetails results={results} captureMetadata={captureMetadata} />
+      <ResultsDetails
+        results={results}
+        captureMetadata={captureMetadata}
+        ocrText={ocrText}
+        annotatedOcrLines={annotatedOcrLines}
+        ocrTextTruncated={ocrTextTruncated}
+        ocrTextFullLength={ocrTextFullLength}
+      />
     </div>
   );
 }
