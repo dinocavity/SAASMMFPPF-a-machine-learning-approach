@@ -10,6 +10,165 @@ import { ACTION_TYPES, PHASES, FRAUD_MODEL_IDS, SENTIMENT_MODEL_IDS } from "@/li
 
 const DISABLED_MODELS_KEY = "saasmmfppf_disabled_models";
 
+// Known UI section headers that signal we've left the review area.
+// Matched against each screenshot block independently (per-block cut in cleanOcrText).
+const RECOMMENDATION_PATTERNS = [
+  /you may also like/i, /you might also like/i, /similar products/i,
+  /customers also bought/i, /related products/i, /also viewed/i,
+  /recommended for you/i, /recommend for you/i,   // Lazada omits the "ed"
+  /more from this shop/i, /more products/i,
+  /from the same shop/i, /from the same seller/i,
+  /from the same store/i, /from this store/i,     // Lazada variant
+  /you may also need/i, /similar items/i,
+  /product details of/i,                           // Lazada product description section
+];
+
+// Determines whether a cleaned line should be kept in the final text sent to the
+// backend. Used both for filtering and for building the annotated line list shown
+// in ProcessedTextPanel.
+function isLineKept(t) {
+  if (!t) return true;                    // empty lines are kept (spacing)
+  if (t.length < 3) return false;
+
+  if (/^[★☆⭐✩✭✪✫✬\s]+$/.test(t)) return false;
+  if (/^\d+(\.\d+)?\s*(\/\s*\d+|out of\s+\d+|stars?|[★☆⭐✩✭✪✫✬\s]*)?\s*$/i.test(t)) return false;
+
+  if (/^[₱$€£¥]\s*[\d,]+/.test(t)) return false;
+  if (/^[so0]?\d{3,}\s*$/.test(t)) return false;
+
+  if ((t.match(/\|/g) || []).length >= 2) return false;
+  if (/[»«→←↑↓►◄▶◀]/.test(t)) return false;
+  if (/^[&\[#]/.test(t)) return false;
+
+  const alphaCount = (t.match(/[a-zA-Z0-9\u00C0-\u024F]/g) || []).length;
+  if (t.length >= 4 && alphaCount / t.length < 0.4) return false;
+
+  const noSpace = t.replace(/\s/g, '');
+  if (
+    noSpace.length >= 3 && noSpace.length <= 8 &&
+    /^[a-zA-Z]+$/.test(noSpace) &&
+    !/[aeiouAEIOU]/.test(noSpace)
+  ) return false;
+
+  if (/^[A-Z][a-z][A-Z]{2,4}$/.test(noSpace)) return false;
+  if (/^[^a-zA-Z0-9\s]{1,2}[a-zA-Z]{3,6}$/.test(t)) return false;
+  if (/^[a-z]{2,6}\d{3,7}$/.test(t)) return false;
+  if (/^\d{2,}[a-zA-Z]{1,2}$/.test(t)) return false;
+  if (/\s[\[\]]\s|\s[\[\]]$|^[\[\]]\s/.test(t)) return false;
+
+  const tokens = t.split(/\s+/).filter(Boolean);
+  if (tokens.length >= 5) {
+    const shortCount = tokens.filter(tok => tok.replace(/[^a-zA-Z0-9]/g, '').length <= 2).length;
+    if (shortCount / tokens.length >= 0.7) return false;
+  }
+
+  if (/with (comments?|media|images?|videos?)\s*\(\d+\)/i.test(t)) return false;
+  if (/^(sort by|filter|newest|most helpful|top reviews?|all reviews?)$/i.test(t)) return false;
+  if (((t.match(/\(\d+\)/g) || []).length) >= 2) return false;
+
+  if (/\bshopee\s*(app|pay|coins?|careers?|mall|log)\b/i.test(t)) return false;
+  if (/\b(customer\s*service|about\s*shopee|follow\s*us|payment\s*methods?|download)\b/i.test(t)) return false;
+  if (/\b(visa|mastercard|gcash|maya|cod)\b.*\b(visa|mastercard|gcash|maya|cod)\b/i.test(t)) return false;
+
+  if (tokens.length >= 6) {
+    const wc = {};
+    for (const w of tokens) wc[w.toLowerCase()] = (wc[w.toLowerCase()] || 0) + 1;
+    if (Object.values(wc).some(c => c >= 3)) return false;
+  }
+
+  // ── Lazada / general platform UI chrome ──────────────────────────────────
+
+  // Masked usernames: "D***l", "a***g", "R***d"
+  if (/^[A-Za-z]{1,3}\*{2,}[A-Za-z0-9]{0,3}$/.test(t)) return false;
+
+  // Relative timestamps: "1 day ago", "3 hours ago", "2 weeks ago"
+  if (/^\d+\s+(second|minute|hour|day|week|month|year)s?\s+ago$/i.test(t)) return false;
+
+  // Product variant / spec labels: "Color Family: Black.", "Size: Int", "Variation: Red / L"
+  if (/^(colou?r(\s*family)?|size|variation|style|model|variant)\s*:/i.test(t)) return false;
+
+  // Helpful vote lines: "Helpful(0)", "Helpful (12)"
+  if (/^helpful\s*\(\d+\)$/i.test(t)) return false;
+
+  // Seller response section header
+  if (/^seller\s+response$/i.test(t)) return false;
+
+  // Seller boilerplate opener — always templated copy
+  if (/^dear\s+(customer|valued\s+customer|buyer)/i.test(t)) return false;
+
+  // Photo / media count indicators: "+1", "+2", "+12"
+  if (/^\+\d+$/.test(t)) return false;
+
+  // Tab navigation bar: "Reviews Product Details Recommendations"
+  if (/\breviews?\b.*\bproduct\s+details?\b/i.test(t)) return false;
+
+  // Action / CTA buttons
+  if (/^(buy\s+now|add\s+to\s+cart|buy\s+now\s+(add\s+to\s+)?cart|view\s+more\s*\+?)$/i.test(t)) return false;
+
+  // Standalone navigation chip labels
+  if (/^(messages?|lazmall|vouchers?|categories)$/i.test(t)) return false;
+
+  // Pagination: "Page 1 out of 11  1 2 3 4 5"
+  if (/^page\s+\d+\s+out\s+of\s+\d+/i.test(t)) return false;
+
+  // Product spec section headers / attribute labels
+  if (/^(specifications?\s+of|highlights?|quick[- ]drying|breathable)$/i.test(t)) return false;
+  if (/^(activity\s+type|clothing\s+material|pattern|plain)$/i.test(t)) return false;
+  if (/^(athletic\s+use|casual\s+wear|loungewear|outdoor\s*(&|and)?\s*travel)\s*:/i.test(t)) return false;
+
+  // SKU / product codes — long uppercase alphanumeric strings with underscores or dashes
+  if (/^[A-Z0-9]{4,}[_-][A-Z0-9_-]{4,}$/.test(noSpace)) return false;
+
+  // Price-only lines (no real word letters, only digits/currency symbols/punctuation)
+  // e.g. "822000 .58%", "£96.04", "P210.00 £176.00", "R229.00 -56%"
+  const letterCount = (t.match(/[a-zA-Z]/g) || []).length;
+  if (letterCount === 0 && /\d/.test(t)) return false;           // pure numeric/symbol
+  if (letterCount <= 1 && /\d+%/.test(t) && t.length <= 20) return false;  // short discount price
+
+  return true;
+}
+
+// Returns { text, annotatedLines } where:
+//   text          — cleaned string sent to the backend
+//   annotatedLines — Array<{ text: string, kept: boolean }> for display in
+//                    ProcessedTextPanel showing which lines contributed vs. were filtered
+function cleanOcrText(text) {
+  // Step 1: recommendation cut applied PER screenshot block so that a carousel
+  // section at the bottom of one page's last screenshot doesn't discard text
+  // from subsequent review pages.
+  const blocks = text.split('\n\n');
+  const allLines = [];
+  for (const block of blocks) {
+    const blockLines = block.split('\n');
+    let cutIndex = blockLines.length;
+    for (let i = 0; i < blockLines.length; i++) {
+      const lower = blockLines[i].toLowerCase().trim();
+      if (RECOMMENDATION_PATTERNS.some(p => p.test(lower))) {
+        cutIndex = i;
+        break;
+      }
+    }
+    allLines.push(...blockLines.slice(0, cutIndex));
+  }
+
+  // Step 2: clean each line and record whether it was kept or filtered out.
+  const annotatedLines = allLines.map(raw => {
+    const t = raw
+      .replace(/\s*\|\s*/g, ' ')
+      .replace(/[_=]{2,}/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    return { text: t, kept: isLineKept(t) };
+  });
+
+  const cleanedText = annotatedLines
+    .filter(l => l.kept)
+    .map(l => l.text)
+    .join('\n');
+
+  return { text: cleanedText, annotatedLines };
+}
+
 function loadDisabledModels() {
   try {
     const raw = localStorage.getItem(DISABLED_MODELS_KEY);
@@ -30,6 +189,8 @@ export function useAnalysis() {
   const platformState = usePlatformDetection();
 
   const [results, setResults] = useState(null);
+  const [ocrText, setOcrText] = useState(null);
+  const [annotatedOcrLines, setAnnotatedOcrLines] = useState(null);
   const [resultsSaved, setResultsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -80,6 +241,8 @@ export function useAnalysis() {
 
   const reset = useCallback(() => {
     setResults(null);
+    setOcrText(null);
+    setAnnotatedOcrLines(null);
     setLoading(false);
     setError("");
     setResultsSaved(false);
@@ -172,6 +335,7 @@ export function useAnalysis() {
           captureState.scrollTimeoutRef.current = null;
         }
         const shots = message.screenshots || [];
+        const reviewTopOffset = message.reviewTopOffset || 0;
         if (!shots.length) {
           captureState.setAutoFlowStatus("No screenshots captured.");
           captureState.setAutoFlowActive(false);
@@ -194,7 +358,7 @@ export function useAnalysis() {
         } else if (shots.length) {
           captureState.setPageScreenshotCounts([shots.length]);
         }
-        runOcrFlow(shots);
+        runOcrFlow(shots, { reviewTopOffset });
       }
 
       if (message.action === ACTION_TYPES.ANALYSIS_PAGE_COMPLETE) {
@@ -356,7 +520,7 @@ export function useAnalysis() {
   const analyzeText = useCallback(
     async (text) => {
       if (!text?.trim()) {
-        setError("No review text found.");
+        setError("No review text could be extracted. The page may have no reviews, or they may be in an unsupported language.");
         return null;
       }
 
@@ -393,7 +557,7 @@ export function useAnalysis() {
 
   const runOcrFlow = useCallback(
     async (screenshots, options = {}) => {
-      const { prefixText = "" } = options;
+      const { prefixText = "", reviewTopOffset = 0 } = options;
       const totalScreenshots = options.totalScreenshots ?? screenshots.length;
       const completedScreenshots = options.completedScreenshots ?? 0;
       try {
@@ -411,15 +575,24 @@ export function useAnalysis() {
             phaseState.setPhaseProgress(clamped);
             phaseState.setPhaseDetail(`Processing image ${completedScreenshots + imageIndex} of ${totalScreenshots}`);
           }
-        });
+        }, reviewTopOffset);
 
         const text = result?.text || "";
         const stoppedEarly = result?.stoppedEarly;
         const nextIndex = typeof result?.nextIndex === "number" ? result.nextIndex : screenshots.length;
         const nextCompleted = completedScreenshots + nextIndex;
-        const combinedText = prefixText && text
+        const averageConfidence = result?.averageConfidence ?? null;
+
+        if (averageConfidence !== null && averageConfidence < 40) {
+          toast.info(
+            "Low OCR confidence — reviews may be in a language not fully supported. Results may be incomplete."
+          );
+        }
+
+        const rawText = prefixText && text
           ? `${prefixText}\n\n${text}`
           : prefixText || text;
+        const { text: combinedText, annotatedLines } = cleanOcrText(rawText);
 
         if (captureState.cancelRef.current || !combinedText) {
           if (ocrState.ocrTerminatedRef.current) {
@@ -447,6 +620,8 @@ export function useAnalysis() {
           capturedTextPreview: combinedText.slice(0, 200),
           productName: productNameRef.current,
         });
+        setOcrText(combinedText);
+        setAnnotatedOcrLines(annotatedLines);
 
         if (ocrState.ocrPauseRequestedRef.current) {
           ocrState.ocrPauseRequestedRef.current = false;
@@ -700,6 +875,8 @@ export function useAnalysis() {
 
   return {
     results,
+    ocrText,
+    annotatedOcrLines,
     loading,
     error,
     autoFlowActive: captureState.autoFlowActive,
