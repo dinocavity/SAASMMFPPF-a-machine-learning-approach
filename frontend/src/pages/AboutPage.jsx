@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 const GLOSSARY = [
-  { term: "SAASMMFPPF", full: "Sentiment Analysis and Social Media Monitoring for Preventing Purchase Fraud", explanation: "The full title of this project." },
+  { term: "Safeguard", full: "Sentiment Analysis and Social Media Monitoring for Preventing Purchase Fraud", explanation: "The app name. Powered by ML models for fraud and sentiment detection on e-commerce reviews." },
   { term: "ML", full: "Machine Learning", explanation: "Statistical algorithms that learn patterns from data without explicit programming." },
   { term: "OCR", full: "Optical Character Recognition", explanation: "Technology that extracts text from images; used here via Tesseract.js in-browser." },
   { term: "API", full: "Application Programming Interface", explanation: "A remote service endpoint; used here for HuggingFace cloud inference." },
@@ -155,7 +155,7 @@ export function AboutPage() {
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          SAASMMFPPF-a-machine-learning-approach
+          Safeguard
         </p>
         <h1 className="font-heading text-2xl font-semibold">
           SENTIMENT ANALYSIS AND SOCIAL MEDIA MONITORING FOR PREVENTING PURCHASE FRAUD: A MACHINE LEARNING APPROACH.
