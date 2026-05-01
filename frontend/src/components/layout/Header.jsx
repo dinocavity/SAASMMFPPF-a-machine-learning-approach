@@ -28,7 +28,7 @@ export function Header() {
             <ShieldIcon />
             <div>
               <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-muted-foreground">
-                SAASMMFPPF
+                Safeguard
               </p>
               <h1 className="font-heading text-xl font-semibold leading-tight sm:text-2xl">
                 Review Authenticity Analyzer

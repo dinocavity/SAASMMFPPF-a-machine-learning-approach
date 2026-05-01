@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "SAASMMFPPF-a-machine-learning-approach",
+  "name": "Safeguard",
   "version": "0.1.0",
     "background": {
     "service_worker": "background.js"
   },
-  "description": "SENTIMENT ANALYSIS AND SOCIAL MEDIA MONITORING FOR PREVENTING PURCHASE FRAUD: A MACHINE LEARNING APPROACH",
+  "description": "Safeguard - Sentiment Analysis and Social Media Monitoring for Preventing Purchase Fraud",
   "action": {
-    "default_title": "SAASMMFPPF"
+    "default_title": "Safeguard"
   },
   "side_panel": {
     "default_path": "index.html"
