@@ -70,6 +70,18 @@ function getSentimentBadgeVariant(verdict) {
   return "secondary";
 }
 
+function getPlatformFromUrl(url) {
+  if (!url) return null;
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (hostname.includes('shopee')) return 'Shopee';
+    if (hostname.includes('lazada')) return 'Lazada';
+    if (hostname.includes('amazon')) return 'Amazon';
+    if (hostname.includes('tiktok')) return 'TikTok';
+    return null;
+  } catch { return null; }
+}
+
 export function HistoryPage() {
   const { history, clearHistory } = useHistoryContext();
   const navigate = useNavigate();
@@ -244,6 +256,11 @@ export function HistoryPage() {
                               </div>
                             </div>
                             <div className="flex shrink-0 items-center gap-1.5">
+                              {getPlatformFromUrl(entry.url) && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                  {getPlatformFromUrl(entry.url)}
+                                </Badge>
+                              )}
                               <Badge
                                 variant={getFraudBadgeVariant(entry.fraudVerdict)}
                                 className="text-[10px] px-1.5 py-0"
@@ -285,6 +302,11 @@ export function HistoryPage() {
                                   </p>
                                 </div>
                                 <div className="flex shrink-0 gap-1.5">
+                                  {getPlatformFromUrl(sub.url) && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                      {getPlatformFromUrl(sub.url)}
+                                    </Badge>
+                                  )}
                                   <Badge
                                     variant={getFraudBadgeVariant(sub.fraudVerdict)}
                                     className="text-[10px] px-1.5 py-0"
@@ -329,6 +351,11 @@ export function HistoryPage() {
                           </div>
                         </button>
                         <div className="flex shrink-0 gap-1.5">
+                          {getPlatformFromUrl(entry.url) && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              {getPlatformFromUrl(entry.url)}
+                            </Badge>
+                          )}
                           <Badge
                             variant={getFraudBadgeVariant(entry.fraudVerdict)}
                             className="text-[10px] px-1.5 py-0"
