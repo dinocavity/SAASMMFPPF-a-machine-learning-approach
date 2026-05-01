@@ -34,9 +34,9 @@ export function usePlatformDetection() {
       const hostname = parsed.hostname.toLowerCase();
       const pathname = parsed.pathname.toLowerCase();
 
-      // Shopee product pages: contain "-i." followed by shop_id.item_id
+      // Shopee product pages: old "-i.shop_id.item_id" format or modern "/product/item_id/shop_id" shared links
       if (SUPPORTED_DOMAINS.some((d) => (d.startsWith('shopee') && (hostname === d || hostname.endsWith('.' + d))))) {
-        return /-i\.\d+\.\d+/.test(pathname);
+        return /-i\.\d+\.\d+/.test(pathname) || /\/product\/\d+\/\d+/.test(pathname);
       }
 
       // Lazada product pages: /products/ path or -i<item_id> pattern

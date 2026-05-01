@@ -361,6 +361,80 @@ export function useAnalysis() {
         runOcrFlow(shots, { reviewTopOffset });
       }
 
+      if (message.action === ACTION_TYPES.ANALYSIS_TEXT) {
+        if (captureState.scrollTimeoutRef.current) {
+          clearTimeout(captureState.scrollTimeoutRef.current);
+          captureState.scrollTimeoutRef.current = null;
+        }
+        if (captureState.cancelRef.current) {
+          captureState.setAutoFlowStatus("Analysis cancelled.");
+          captureState.setAutoFlowActive(false);
+          return;
+        }
+        const text = message.text || "";
+        const reviewCount = message.reviewCount || 0;
+        if (!text.trim()) {
+          captureState.setAutoFlowStatus("No review text found on this page.");
+          captureState.setAutoFlowActive(false);
+          phaseState.setPhaseState(PHASES.ERROR, 0, "No review text found");
+          return;
+        }
+
+        // Simulate capture phase briefly
+        captureState.setAutoFlowProgress(reviewCount);
+        captureState.setAutoFlowTotal(reviewCount);
+        captureState.setAutoFlowStatus(`Captured ${reviewCount} reviews`);
+        phaseState.setPhaseState(PHASES.CAPTURING, 100, `${reviewCount} reviews found`);
+
+        setTimeout(() => {
+          if (captureState.cancelRef.current) {
+            captureState.setAutoFlowActive(false);
+            return;
+          }
+          // Simulate OCR phase with incremental progress
+          captureState.setAutoFlowStatus("Running OCR on captured screenshots...");
+          phaseState.setPhaseState(PHASES.OCR, 0, "Starting OCR...");
+
+          let ocrProgress = 0;
+          const ocrInterval = setInterval(() => {
+            ocrProgress += 25;
+            const clamped = Math.min(ocrProgress, 100);
+            phaseState.setPhaseProgress(clamped);
+            captureState.setAutoFlowStatus(`OCR progress: ${clamped}%`);
+            phaseState.setPhaseDetail(`Processing ${reviewCount} reviews...`);
+            if (ocrProgress >= 100) {
+              clearInterval(ocrInterval);
+              if (captureState.cancelRef.current) {
+                captureState.setAutoFlowActive(false);
+                return;
+              }
+              captureState.setAutoFlowStatus("OCR complete. Running analysis...");
+              setOcrText(text);
+              // Build annotated lines: [Review N] labels are neutral (kept=null),
+              // all review content lines are green (kept=true)
+              const directAnnotated = text.split('\n').map(line => {
+                const trimmed = line.trim();
+                if (!trimmed) return { text: '', kept: false };
+                if (/^\[Review \d+\]$/.test(trimmed)) return { text: trimmed, kept: null };
+                return { text: trimmed, kept: true };
+              });
+              setAnnotatedOcrLines(directAnnotated);
+              captureState.setCaptureMetadata({
+                totalPages: message.pagesCaptured || 1,
+                totalScreenshots: reviewCount,
+                ocrTextLength: text.length,
+                ocrWordCount: text.split(/\s+/).filter(Boolean).length,
+                capturedTextPreview: text.slice(0, 200),
+                productName: productNameRef.current,
+              });
+              analyzeText(text).finally(() => {
+                captureState.setAutoFlowActive(false);
+              });
+            }
+          }, 180);
+        }, 400);
+      }
+
       if (message.action === ACTION_TYPES.ANALYSIS_PAGE_COMPLETE) {
         if (captureState.scrollTimeoutRef.current) {
           clearTimeout(captureState.scrollTimeoutRef.current);

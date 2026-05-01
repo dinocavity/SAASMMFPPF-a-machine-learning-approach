@@ -32,6 +32,7 @@ export const ACTION_TYPES = {
   ANALYZE_NOW: "analyzeNow",
   PAUSE_AFTER_PAGE: "pauseAfterPage",
   ANALYSIS_ERROR: "analysisError",
+  ANALYSIS_TEXT: "analysisText",
   GET_PRODUCT_NAME: "getProductName",
   TAB_CHANGED: "TAB_CHANGED",
 };
