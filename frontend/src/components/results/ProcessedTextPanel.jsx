@@ -11,8 +11,8 @@ export function ProcessedTextPanel({ ocrText, annotatedOcrLines, ocrTextTruncate
 
   // ── Annotated view (live results) ──────────────────────────────────────────
   if (annotatedOcrLines?.length) {
-    const keptCount = annotatedOcrLines.filter(l => l.kept && l.text).length;
-    const filteredCount = annotatedOcrLines.filter(l => !l.kept && l.text).length;
+    const keptCount = annotatedOcrLines.filter(l => l.kept === true && l.text).length;
+    const filteredCount = annotatedOcrLines.filter(l => l.kept === false && l.text).length;
     const displayLines = expanded ? annotatedOcrLines : annotatedOcrLines.slice(0, PREVIEW_LINES);
     const hasMore = annotatedOcrLines.length > PREVIEW_LINES;
 
@@ -32,7 +32,7 @@ export function ProcessedTextPanel({ ocrText, annotatedOcrLines, ocrTextTruncate
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-4 text-[10px] text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-500/60" />
               Contributed to analysis
@@ -40,6 +40,10 @@ export function ProcessedTextPanel({ ocrText, annotatedOcrLines, ocrTextTruncate
             <span className="flex items-center gap-1.5 opacity-50">
               <span className="inline-block w-2.5 h-2.5 rounded-sm bg-muted-foreground/30" />
               Filtered out (noise / OCR artifact)
+            </span>
+            <span className="flex items-center gap-1.5 opacity-60">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm border border-muted-foreground/40" />
+              Review label
             </span>
           </div>
 
@@ -50,11 +54,21 @@ export function ProcessedTextPanel({ ocrText, annotatedOcrLines, ocrTextTruncate
               if (!line.text) {
                 return <div key={i} className="h-2" />;
               }
-              if (line.kept) {
+              if (line.kept === true) {
                 return (
                   <div
                     key={i}
                     className="px-1.5 py-px rounded bg-green-500/10 text-foreground/90 font-mono text-[11px] leading-relaxed"
+                  >
+                    {line.text}
+                  </div>
+                );
+              }
+              if (line.kept === null) {
+                return (
+                  <div
+                    key={i}
+                    className="px-1.5 py-0.5 mt-1 text-muted-foreground/50 font-mono text-[10px] leading-relaxed font-semibold tracking-wide"
                   >
                     {line.text}
                   </div>

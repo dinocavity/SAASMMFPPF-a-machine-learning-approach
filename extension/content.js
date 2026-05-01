@@ -292,10 +292,20 @@ function findReviewSectionBottom() {
     '#customer-reviews',
     '#cm_cr-review_list',
     '[data-e2e="product-review"]',
+    // TikTok Shop confirmed ID
+    '#pdp-review-section',
     '.product-review',
+    // TikTok Shop: container class is "reviews__bd-<hash>" (CSS module with hash suffix)
+    '[class*="reviews__bd"]',
     '[class*="review-list"]',
     '[class*="reviews-container"]',
     '[class*="rating-list"]',
+    // Lazada confirmed
+    '.pdp-mod-review-main',
+    '[class*="pdp-mod-review"]',
+    '[class*="pdp-review"]',
+    '[class*="mod-ratings"]',
+    '[id*="module_product_review"]',
   ];
   for (const sel of containerSelectors) {
     const el = document.querySelector(sel);
@@ -307,6 +317,12 @@ function findReviewSectionBottom() {
   const itemSelectors = [
     '.shopee-product-rating', '[data-hook="review"]',
     '[class*="review-item"]', '.item-review',
+    // TikTok Shop: individual review items use "review-dp<hash>" (CSS module)
+    '[class*="review-dp"]',
+    // Lazada confirmed review item class
+    '.item-content-main-content-reviews-item',
+    // Shopee confirmed review item class (hashed CSS module)
+    '.YNedDV',
   ];
   let lowestBottom = 0;
   for (const sel of itemSelectors) {
@@ -326,6 +342,12 @@ function hasRecommendationContent() {
     'recommended for you', 'more from this shop', 'more products',
     'from the same shop', 'from the same seller',
     'similar items', 'you may also need',
+    // Filipino / Tagalog
+    'maaaring gusto mo rin', 'mga katulad na produkto', 'mungkahi para sa iyo',
+    'mga produktong katulad', 'inirerekomenda para sa iyo',
+    // Malay / Indonesian
+    'anda mungkin juga suka', 'produk serupa', 'rekomendasi untuk anda',
+    'produk terkait', 'pelanggan juga membeli',
   ];
   // Check headings and prominent elements near the top half of the viewport
   const candidates = document.querySelectorAll('h1,h2,h3,h4,[class*="title"],[class*="heading"],[class*="section"]');
@@ -434,9 +456,97 @@ function startAutoAnalyze(pagination) {
     }
   }, 8000);
   setTimeout(() => {
-    captureReviewTopOffset = getFirstReviewItemTop();
-    captureReviewScreenshots(handlePageCaptured);
+    const cfg = getDirectExtractionConfig();
+    if (cfg) {
+      extractDirectReviewText(cfg);
+    } else {
+      captureReviewTopOffset = getFirstReviewItemTop();
+      captureReviewScreenshots(handlePageCaptured);
+    }
   }, 1000);
+}
+
+// Per-platform selectors for direct DOM text extraction (bypasses screenshots/OCR).
+// itemSelector: the element whose textContent is one review.
+// scopeSelector: optional ancestor to limit the search (avoids grabbing non-review text).
+function getDirectExtractionConfig() {
+  const h = window.location.hostname;
+  if (h.includes('tiktok'))  return { item: '.H4-Regular.text-color-UIText1', scope: '#pdp-review-section' };
+  if (h.includes('lazada'))  return { item: '.item-content-main', scope: null, exclude: '.seller-reply-wrapper-v2' };
+  if (h.includes('shopee'))  return { item: '.YNedDV', scope: null };
+  return null;
+}
+
+function extractDirectReviewText({ item: itemSelector, scope: scopeSelector, exclude: excludeSelector }) {
+  const allTexts = [];
+  let pageNum = 1;
+
+  if (firstCaptureTimeoutId) {
+    clearTimeout(firstCaptureTimeoutId);
+    firstCaptureTimeoutId = null;
+  }
+
+  function collectFromPage() {
+    const root = (scopeSelector && document.querySelector(scopeSelector)) || document;
+    root.querySelectorAll(itemSelector).forEach(el => {
+      if (excludeSelector && el.closest(excludeSelector)) return;
+      const text = el.textContent.trim();
+      if (text && text.length > 5) allTexts.push(text);
+    });
+  }
+
+  function sendAndFinish() {
+    const numberedText = allTexts.map((t, i) => `[Review ${i + 1}]\n${t}`).join('\n\n');
+    chrome.runtime.sendMessage({
+      action: 'analysisText',
+      text: numberedText,
+      reviewCount: allTexts.length,
+      pagesCaptured: pageNum,
+    });
+    window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+    isRunning = false;
+  }
+
+  function processPage() {
+    if (stopRequested) {
+      chrome.runtime.sendMessage({ action: 'analysisStopped' });
+      window.scrollTo({ top: originalScrollY, behavior: 'smooth' });
+      isRunning = false;
+      return;
+    }
+
+    collectFromPage();
+
+    chrome.runtime.sendMessage({
+      action: 'analysisProgress',
+      current: pageNum,
+      total: maxPages === Infinity ? pageNum : maxPages,
+      page: pageNum,
+      pageTotal: totalPagesForUi,
+    });
+
+    if (!paginationEnabled || pageNum >= maxPages) {
+      sendAndFinish();
+      return;
+    }
+
+    scrollToPaginationArea();
+    setTimeout(() => {
+      const clicked = clickNextPageButton();
+      if (!clicked) {
+        sendAndFinish();
+        return;
+      }
+      pageNum++;
+      setTimeout(() => {
+        scrollRatingsToTop();
+        setTimeout(processPage, 1500);
+      }, 2000);
+    }, 600);
+  }
+
+  scrollRatingsToTop();
+  setTimeout(processPage, 1500);
 }
 
 function cacheRatingsAnchor() {
@@ -454,11 +564,15 @@ function cacheRatingsAnchor() {
     "#customer-reviews",
     "[data-hook='reviews-medley-footer']",
     // TikTok Shop review selectors
+    "#pdp-review-section",
     "[data-e2e='product-review']",
-    "[class*='ReviewList']",
+    "[class*='reviews__bd']",
     "[class*='review-list']",
     "[class*='review-filter-container']",
     "[class*='review-filter']",
+    // Lazada confirmed
+    ".pdp-mod-review-main",
+    "[class*='pdp-mod-review']",
   ];
 
   for (const selector of selectorCandidates) {
@@ -704,7 +818,9 @@ function captureReviewScreenshots(onComplete) {
         }
 
         const nextY = y + step;
-        if (index + 1 < maxShots && nextY < docHeight - 50) {
+        const reviewBottom = findReviewSectionBottom();
+        const withinReviews = reviewBottom === null || nextY < reviewBottom;
+        if (index + 1 < maxShots && nextY < docHeight - 50 && withinReviews) {
           captureAt(index + 1, nextY);
         } else {
           finishCapture();
